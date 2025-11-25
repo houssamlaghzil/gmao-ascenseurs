@@ -4,7 +4,7 @@
  * Composant client pour la liste des parcs avec recherche et tri
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { ParcAscenseurs, StatistiquesParc, TypeParc } from '@/domain/types';
 import { Search, ArrowUpDown, ExternalLink, Building, MapPin } from 'lucide-react';
@@ -24,7 +24,7 @@ export default function ParcsListClient({ initialParcs, statistiques }: ParcsLis
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
   // Fonction pour obtenir les stats d'un parc
-  const getStats = (parcId: string) => {
+  const getStats = useCallback((parcId: string) => {
     return statistiques.find(s => s.parcId === parcId) || {
       parcId,
       totalAscenseurs: 0,
@@ -32,7 +32,7 @@ export default function ParcsListClient({ initialParcs, statistiques }: ParcsLis
       nombreEnPanne: 0,
       nombreEnReparation: 0,
     };
-  };
+  }, [statistiques]);
 
   // Filtrage et tri
   const filteredAndSortedParcs = useMemo(() => {
@@ -70,7 +70,7 @@ export default function ParcsListClient({ initialParcs, statistiques }: ParcsLis
     });
 
     return result;
-  }, [initialParcs, searchTerm, filterType, sortField, sortOrder, statistiques]);
+  }, [initialParcs, searchTerm, filterType, sortField, sortOrder, getStats]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {

@@ -33,7 +33,7 @@ export default async function ParcsPage() {
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Liste des Parcs</h1>
         <p className="mt-2 text-gray-600">
-          Consultez et gérez tous vos parcs d'ascenseurs
+          Consultez et gérez tous vos parcs d&apos;ascenseurs
         </p>
       </div>
 

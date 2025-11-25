@@ -4,7 +4,7 @@
  * Composant client pour la liste des ascenseurs avec recherche, filtres et tri
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Ascenseur, ParcAscenseurs, EtatGlobal } from '@/domain/types';
@@ -42,10 +42,10 @@ export default function AscenseursListClient({ initialAscenseurs, parcs }: Ascen
   }, [isAnimating]);
 
   // Fonction pour obtenir le nom du parc
-  const getParcName = (parcId: string) => {
+  const getParcName = useCallback((parcId: string) => {
     const parc = parcs.find(p => p.id === parcId);
     return parc ? parc.nom : 'Parc inconnu';
-  };
+  }, [parcs]);
 
   // Filtrage et tri
   const filteredAndSortedAscenseurs = useMemo(() => {
@@ -86,7 +86,7 @@ export default function AscenseursListClient({ initialAscenseurs, parcs }: Ascen
     });
 
     return result;
-  }, [initialAscenseurs, searchTerm, filterEtat, filterParc, sortField, sortOrder, parcs]);
+  }, [initialAscenseurs, searchTerm, filterEtat, filterParc, sortField, sortOrder, getParcName]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
