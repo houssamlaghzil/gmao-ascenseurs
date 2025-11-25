@@ -7,12 +7,18 @@ import {
   getAllStatistiques 
 } from '@/data/store';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export async function POST(request: Request) {
   try {
+    // Initialiser OpenAI à la demande pour éviter les erreurs au build si la clé n'est pas définie
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { success: false, error: 'OPENAI_API_KEY manquante côté serveur' },
+        { status: 500 }
+      );
+    }
+    const openai = new OpenAI({ apiKey });
+
     const { date } = await request.json();
     const reportDate = date || new Date().toISOString().split('T')[0];
 
