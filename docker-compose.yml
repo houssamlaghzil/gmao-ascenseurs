@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Application Next.js GMAO Ascenseurs
   web:
