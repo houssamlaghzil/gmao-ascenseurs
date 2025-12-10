@@ -49,9 +49,6 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Copier le dossier public s'il existe (optionnel)
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public 2>/dev/null || true
-
 # Copier les fichiers de données (store JSON)
 COPY --from=builder --chown=nextjs:nodejs /app/data ./data
 
