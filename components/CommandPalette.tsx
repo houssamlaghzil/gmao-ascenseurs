@@ -22,7 +22,7 @@ import { useParcs, useAscenseurs } from '@/lib/react-query/hooks';
 import { useCommandPalette } from '@/lib/contexts/CommandPaletteContext';
 
 export default function CommandPalette() {
-  const { open, setOpen } = useCommandPalette();
+  const { open, setOpen, toggle } = useCommandPalette();
   const [search, setSearch] = useState('');
   const router = useRouter();
   
@@ -34,13 +34,13 @@ export default function CommandPalette() {
     const down = (e: KeyboardEvent) => {
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        setOpen((open) => !open);
+        toggle();
       }
     };
 
     document.addEventListener('keydown', down);
     return () => document.removeEventListener('keydown', down);
-  }, [setOpen]);
+  }, [toggle]);
 
   const handleSelect = useCallback((callback: () => void) => {
     setOpen(false);
