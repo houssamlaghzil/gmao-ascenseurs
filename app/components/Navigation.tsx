@@ -16,7 +16,8 @@ import {
   Settings,
   Building,
   List,
-  Search
+  Search,
+  BarChart3
 } from 'lucide-react';
 
 export default function Navigation() {
@@ -128,6 +129,17 @@ export default function Navigation() {
                 </div>
               )}
             </div>
+            <Link
+              href="/analytics"
+              className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-all ${
+                isActive('/analytics')
+                  ? 'bg-indigo-100 text-indigo-700'
+                  : 'text-gray-700 hover:text-indigo-600 hover:bg-gray-100'
+              }`}
+            >
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Analytics
+            </Link>
             <Link
               href="/rapports"
               className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-all ${

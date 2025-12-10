@@ -7,6 +7,7 @@ Application complète de gestion de maintenance pour parcs d'ascenseurs avec des
 - 🎯 **Interface de gestion innovante** avec drag & drop
 - 💾 **Sauvegarde automatique** sans bouton
 - 🤖 **Rapports journaliers IA** générés par OpenAI
+- 📊 **Dashboard Analytics** avec infographies dynamiques et agrégation de données
 
 ---
 
@@ -55,7 +56,48 @@ Application complète de gestion de maintenance pour parcs d'ascenseurs avec des
 
 ---
 
-### 2. Page Rapports IA (`/rapports`)
+### 2. Page Analytics (`/analytics`)
+
+#### 📊 Dashboard d'Agrégation de Données
+- **KPIs en temps réel** : 8 indicateurs clés animés
+  - Total ascenseurs, parcs, techniciens
+  - Taux de disponibilité
+  - MTTR (Mean Time To Repair)
+  - Pannes par semaine/mois
+  - Réparations en cours
+
+#### 📈 Visualisations Dynamiques
+- **Donut Chart** : Répartition des états (fonctionnel/panne/réparation)
+- **Gauge Chart** : Performance globale avec gradient coloré
+- **Heatmap 90 jours** : Activité style GitHub contributions
+- **Sparklines** : Tendances par parc sur 7 jours
+- **Barres de progression** : Répartition par type de parc
+
+#### 🏢 Statistiques par Parc
+- Vue en grille de tous les parcs
+- Score de risque moyen
+- Tendance d'activité sur 7 jours
+- Taux de disponibilité par parc
+
+#### 👥 Performance Techniciens
+- Classement des techniciens par interventions
+- Temps moyen de réparation
+- Interventions en cours
+
+#### 🔥 Types de Pannes Fréquentes
+- Top 5 des causes de pannes
+- Barres de progression visuelles
+
+#### 🎨 Composants Visuels (sans dépendance externe)
+- **DonutChart** : SVG animé avec segments colorés
+- **Sparkline** : Mini-graphe avec courbe lissée
+- **Heatmap** : Grille 90 jours avec tooltip
+- **GaugeChart** : Jauge semi-circulaire avec gradient
+- **CountUp** : Compteurs animés de 0 à N
+
+---
+
+### 3. Page Rapports IA (`/rapports`)
 
 #### 🤖 Génération Automatique
 - **Intelligence artificielle** : Utilise GPT-4o-mini d'OpenAI
@@ -335,7 +377,7 @@ Réponse :
 - [ ] Authentification utilisateur
 - [ ] Export PDF des rapports
 - [ ] Notifications en temps réel
-- [ ] Graphiques et analytics
+- [x] Graphiques et analytics
 - [ ] Mode hors ligne (PWA)
 - [ ] Rapports hebdomadaires/mensuels
 - [ ] Prédictions IA pour la maintenance
