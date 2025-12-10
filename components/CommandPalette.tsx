@@ -19,9 +19,10 @@ import {
   X 
 } from 'lucide-react';
 import { useParcs, useAscenseurs } from '@/lib/react-query/hooks';
+import { useCommandPalette } from '@/lib/contexts/CommandPaletteContext';
 
 export default function CommandPalette() {
-  const [open, setOpen] = useState(false);
+  const { open, setOpen } = useCommandPalette();
   const [search, setSearch] = useState('');
   const router = useRouter();
   
@@ -39,13 +40,13 @@ export default function CommandPalette() {
 
     document.addEventListener('keydown', down);
     return () => document.removeEventListener('keydown', down);
-  }, []);
+  }, [setOpen]);
 
   const handleSelect = useCallback((callback: () => void) => {
     setOpen(false);
     setSearch('');
     callback();
-  }, []);
+  }, [setOpen]);
 
   if (!open) return null;
 

@@ -6,7 +6,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useCommandPalette } from '@/lib/contexts/CommandPaletteContext';
 import {
   Building2,
   LayoutDashboard,
@@ -14,12 +15,20 @@ import {
   FileBarChart,
   Settings,
   Building,
-  List
+  List,
+  Search
 } from 'lucide-react';
 
 export default function Navigation() {
   const pathname = usePathname();
   const [dataMenuOpen, setDataMenuOpen] = useState(false);
+  const { toggle } = useCommandPalette();
+  const [isMac, setIsMac] = useState(false);
+
+  // Détecter si on est sur Mac
+  useEffect(() => {
+    setIsMac(navigator.platform.toUpperCase().indexOf('MAC') >= 0);
+  }, []);
 
   const isActive = (path: string) => pathname === path;
   const isActivePrefix = (prefix: string) => pathname?.startsWith(prefix);
@@ -37,7 +46,7 @@ export default function Navigation() {
           </Link>
 
           {/* Navigation */}
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-2">
             <Link
               href="/"
               className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-all ${
@@ -130,6 +139,19 @@ export default function Navigation() {
               <FileBarChart className="h-4 w-4 mr-2" />
               Rapports IA
             </Link>
+
+            {/* Bouton Command Palette */}
+            <button
+              onClick={toggle}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-blue-600 border border-gray-300 rounded-md hover:border-blue-400 transition-all hover:shadow-sm"
+              title="Ouvrir la palette de commandes"
+            >
+              <Search className="h-3.5 w-3.5" />
+              <kbd className="hidden sm:inline-flex items-center gap-1 font-mono text-xs">
+                <span className="text-xs">{isMac ? '⌘' : 'Ctrl'}</span>
+                <span>K</span>
+              </kbd>
+            </button>
           </nav>
         </div>
       </div>

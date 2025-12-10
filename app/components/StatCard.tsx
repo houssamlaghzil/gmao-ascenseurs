@@ -5,16 +5,25 @@
  */
 
 import { useRouter } from 'next/navigation';
-import { LucideIcon } from 'lucide-react';
+import { Building, Activity, AlertCircle, Wrench } from 'lucide-react';
 import { useState } from 'react';
+
+type IconName = 'building' | 'activity' | 'alert-circle' | 'wrench';
 
 interface StatCardProps {
   label: string;
   value: number;
-  icon: LucideIcon;
+  iconName: IconName;
   color: 'blue' | 'green' | 'red' | 'yellow';
   href: string;
 }
+
+const iconMap = {
+  'building': Building,
+  'activity': Activity,
+  'alert-circle': AlertCircle,
+  'wrench': Wrench,
+};
 
 const colorClasses = {
   blue: {
@@ -43,10 +52,11 @@ const colorClasses = {
   },
 };
 
-export default function StatCard({ label, value, icon: Icon, color, href }: StatCardProps) {
+export default function StatCard({ label, value, iconName, color, href }: StatCardProps) {
   const router = useRouter();
   const [isExpanding, setIsExpanding] = useState(false);
   const classes = colorClasses[color];
+  const Icon = iconMap[iconName];
 
   const handleClick = () => {
     setIsExpanding(true);

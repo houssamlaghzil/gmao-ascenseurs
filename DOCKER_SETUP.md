@@ -96,20 +96,39 @@ coverage/
 ```yaml
 services:
   web:
-    build: .
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
+    image: gmao-ascenseurs:latest
     container_name: gmao-ascenseurs
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:3000"
+    volumes:
+      - gmao_data:/app/data
     restart: unless-stopped
-    healthcheck:
-      test: curl http://localhost:3000/api/health
-      interval: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  gmao_data:
+    driver: local
 ```
 
 **Fonctionnalités** :
-- Healthcheck automatique
+- **env_file** : Charge automatiquement les variables depuis `.env`
+- **Build args** : Variables `NEXT_PUBLIC_*` passées au build
+- **Volume persistant** : Données sauvegardées entre redémarrages
+- **Logging** : Rotation automatique des logs
 - Restart policy (haute disponibilité)
-- Variables d'environnement
 
 ### 4. **scripts/deploy.sh** - Déploiement Automatisé
 
@@ -200,18 +219,42 @@ npm run dev
 ### Production avec Docker
 
 ```bash
-# Première installation
-npm run deploy
+# 1. Configurer les variables d'environnement
+cp .env.example .env
+# Éditer .env avec vos valeurs (OPENAI_API_KEY, NEXT_PUBLIC_API_URL, etc.)
 
-# Mise à jour rapide
+# 2. Build et démarrage
+docker compose up -d --build
+
+# Ou via npm scripts:
+npm run docker:build
+npm run docker:up
+
+# Mise à jour rapide (git pull + rebuild)
 npm run maj
 
-# Mise à jour complète
+# Mise à jour complète (sans cache)
 npm run maj:hard
 
 # Voir les logs
 npm run logs
 ```
+
+### Variables d'Environnement
+
+Le fichier `.env` à la racine est automatiquement chargé par docker-compose :
+
+```bash
+# .env
+PORT=3000
+NEXT_PUBLIC_API_URL=https://gmao.mondomaine.com
+OPENAI_API_KEY=sk-...
+```
+
+**Important** :
+- Les variables `NEXT_PUBLIC_*` sont injectées au **build time**
+- Les autres variables sont disponibles au **runtime**
+- Pour changer `NEXT_PUBLIC_API_URL`, il faut rebuild l'image
 
 ## 📊 Métriques de Performance
 
@@ -364,6 +407,9 @@ docker cp ./backup_20241125/data gmao-ascenseurs:/app/
 - [x] next.config.mjs mode standalone
 - [x] .gitignore mis à jour
 - [x] .env.example documenté
+- [x] Support fichier .env automatique
+- [x] Volume persistant pour les données
+- [x] Logging avec rotation
 
 ## 📚 Ressources
 

@@ -3,7 +3,7 @@
  * Version simplifiée avec appels API directs au store
  */
 
-import { Building, Activity, AlertCircle, Wrench, TrendingUp } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 import { getAllParcs, getAllStatistiques, getRecentEvenements, getHighRiskAscenseurs } from '@/data/store';
 import Link from 'next/link';
 import StatCard from './components/StatCard';
@@ -53,28 +53,28 @@ export default async function DashboardPage() {
         <StatCard
           label="Total Ascenseurs"
           value={statsGlobales.totalAscenseurs}
-          icon={Building}
+          iconName="building"
           color="blue"
           href="/ascenseurs"
         />
         <StatCard
           label="Fonctionnels"
           value={statsGlobales.nombreFonctionnels}
-          icon={Activity}
+          iconName="activity"
           color="green"
           href="/ascenseurs?etat=fonctionnel"
         />
         <StatCard
           label="En Panne"
           value={statsGlobales.nombreEnPanne}
-          icon={AlertCircle}
+          iconName="alert-circle"
           color="red"
           href="/ascenseurs?etat=en_panne"
         />
         <StatCard
           label="En Réparation"
           value={statsGlobales.nombreEnReparation}
-          icon={Wrench}
+          iconName="wrench"
           color="yellow"
           href="/ascenseurs?etat=en_cours_de_reparation"
         />
