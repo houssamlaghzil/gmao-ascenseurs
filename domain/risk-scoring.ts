@@ -1,19 +1,19 @@
 /**
  * Logique de maintenance prédictive
  * Calcul du score de risque de panne à 7 jours
- * 
+ *
  * Facteurs pris en compte :
- * - Nombre de pannes récentes (30 derniers jours)
- * - Temps depuis la dernière réparation
+ * - Nombre d'interventions récentes (30 derniers jours)
+ * - Temps depuis la dernière intervention clôturée
  * - Type de parc (tertiaire vs résidentiel)
- * - État actuel de l'ascenseur
+ * - Statut actuel de l'appareil, et présence d'une intervention encore ouverte
  */
 
 import {
   Ascenseur,
-  EtatGlobal,
-  EvenementHistorique,
-  TypeEvenement,
+  StatutAppareil,
+  Intervention,
+  StatutIntervention,
   ParcAscenseurs,
   TypeParc,
   RiskScore,
@@ -21,56 +21,59 @@ import {
 } from './types';
 
 /**
- * Calcule le nombre de pannes dans les N derniers jours
+ * Calcule le nombre d'interventions ouvertes dans les N derniers jours
+ * sur cet appareil (toute intervention, quel que soit son motif, est un
+ * signal d'incident — distinct d'une Maintenance planifiée).
  */
-function countPannesRecentes(
-  historique: EvenementHistorique[],
+function countInterventionsRecentes(
+  interventions: Intervention[],
   ascenseurId: string,
   nbJours: number
 ): number {
   const seuil = new Date();
   seuil.setDate(seuil.getDate() - nbJours);
 
-  return historique.filter(
-    (evt) =>
-      evt.ascenseurId === ascenseurId &&
-      evt.typeEvenement === TypeEvenement.PANNE_DECLAREE &&
-      new Date(evt.dateHeure) >= seuil
+  return interventions.filter(
+    (i) => i.ascenseurId === ascenseurId && new Date(i.dateCreation) >= seuil
   ).length;
 }
 
 /**
- * Trouve la date de la dernière réparation terminée
+ * Trouve la date de clôture de la dernière intervention terminée sur cet appareil
  */
-function getDerniereReparation(
-  historique: EvenementHistorique[],
+function getDerniereInterventionCloturee(
+  interventions: Intervention[],
   ascenseurId: string
 ): Date | null {
-  const reparations = historique
-    .filter(
-      (evt) =>
-        evt.ascenseurId === ascenseurId &&
-        evt.typeEvenement === TypeEvenement.FIN_REPARATION
-    )
-    .sort((a, b) => new Date(b.dateHeure).getTime() - new Date(a.dateHeure).getTime());
+  const cloturees = interventions
+    .filter((i) => i.ascenseurId === ascenseurId && i.statut === StatutIntervention.CLOTURE && i.dateCloture)
+    .sort((a, b) => new Date(b.dateCloture!).getTime() - new Date(a.dateCloture!).getTime());
 
-  if (reparations.length === 0) return null;
-  return new Date(reparations[0].dateHeure);
+  if (cloturees.length === 0) return null;
+  return new Date(cloturees[0].dateCloture!);
 }
 
 /**
- * Calcule le nombre de jours depuis la dernière réparation
+ * Calcule le nombre de jours depuis la dernière intervention clôturée
  */
-function joursDepuisDerniereReparation(
-  historique: EvenementHistorique[],
+function joursDepuisDerniereIntervention(
+  interventions: Intervention[],
   ascenseurId: string
 ): number {
-  const derniereReparation = getDerniereReparation(historique, ascenseurId);
-  if (!derniereReparation) return 365; // Aucune réparation = considéré comme ancien
+  const derniere = getDerniereInterventionCloturee(interventions, ascenseurId);
+  if (!derniere) return 365; // Aucune intervention clôturée = considéré comme ancien
 
   const maintenant = new Date();
-  const diff = maintenant.getTime() - derniereReparation.getTime();
+  const diff = maintenant.getTime() - derniere.getTime();
   return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Une intervention encore ouverte (non clôturée) sur l'appareil est en soi
+ * un facteur de risque : l'appareil est activement suivi pour un incident.
+ */
+function aUneInterventionOuverte(interventions: Intervention[], ascenseurId: string): boolean {
+  return interventions.some((i) => i.ascenseurId === ascenseurId && i.statut !== StatutIntervention.CLOTURE);
 }
 
 /**
@@ -90,16 +93,19 @@ function coefficientTypeParc(typeParc: TypeParc): number {
 }
 
 /**
- * Bonus de risque si l'ascenseur est actuellement en panne ou en réparation
+ * Bonus de risque selon le statut actuel de l'appareil. ARRET_TRAVAUX est
+ * une suspension délibérée (chantier), pas un signal de risque.
  */
-function bonusEtatActuel(etat: EtatGlobal): number {
-  switch (etat) {
-    case EtatGlobal.EN_PANNE:
+function bonusStatutActuel(statut: StatutAppareil): number {
+  switch (statut) {
+    case StatutAppareil.EN_PANNE:
       return 20;
-    case EtatGlobal.EN_COURS_DE_REPARATION:
+    case StatutAppareil.A_L_ARRET:
       return 15;
-    case EtatGlobal.FONCTIONNEL:
-      return 0;
+    case StatutAppareil.MODE_DEGRADE:
+      return 12;
+    case StatutAppareil.ARRET_TRAVAUX:
+    case StatutAppareil.EN_SERVICE:
     default:
       return 0;
   }
@@ -107,43 +113,35 @@ function bonusEtatActuel(etat: EtatGlobal): number {
 
 /**
  * Calcule le score de risque de panne à 7 jours
- * 
+ *
  * Formule :
- * - Base : nombre de pannes dans les 30 derniers jours × 15 points
- * - Ajout : (jours depuis dernière réparation / 10) points
+ * - Base : nombre d'interventions dans les 30 derniers jours × 15 points
+ * - Ajout : (jours depuis dernière intervention clôturée / 10) points
  * - Multiplication par coefficient du type de parc
- * - Ajout du bonus d'état actuel
+ * - Ajout du bonus de statut actuel + bonus intervention ouverte
  * - Plafonné entre 0 et 100
- * 
- * @param ascenseur L'ascenseur à évaluer
- * @param historique L'historique complet des événements
- * @param parc Le parc auquel appartient l'ascenseur
- * @returns Score entre 0 et 100
  */
 export function computeRiskScore(
   ascenseur: Ascenseur,
-  historique: EvenementHistorique[],
+  interventions: Intervention[],
   parc: ParcAscenseurs
 ): number {
-  // Nombre de pannes récentes (poids fort)
-  const pannesRecentes = countPannesRecentes(historique, ascenseur.id, 30);
-  const scorePannes = pannesRecentes * 15;
+  const interventionsRecentes = countInterventionsRecentes(interventions, ascenseur.id, 30);
+  const scoreInterventions = interventionsRecentes * 15;
 
-  // Temps depuis dernière réparation (poids moyen)
-  const joursDepuis = joursDepuisDerniereReparation(historique, ascenseur.id);
+  const joursDepuis = joursDepuisDerniereIntervention(interventions, ascenseur.id);
   const scoreTemps = joursDepuis / 10;
 
-  // Score de base
-  let scoreBase = scorePannes + scoreTemps;
+  let scoreBase = scoreInterventions + scoreTemps;
 
-  // Application du coefficient de type de parc
   const coef = coefficientTypeParc(parc.type);
   scoreBase *= coef;
 
-  // Ajout du bonus d'état actuel
-  scoreBase += bonusEtatActuel(ascenseur.etatGlobal);
+  scoreBase += bonusStatutActuel(ascenseur.statutAppareil);
+  if (aUneInterventionOuverte(interventions, ascenseur.id)) {
+    scoreBase += 15;
+  }
 
-  // Plafonnement entre 0 et 100
   return Math.max(0, Math.min(100, Math.round(scoreBase)));
 }
 
@@ -162,15 +160,14 @@ export function getRiskLevel(score: number): RiskLevel {
  */
 export function generateRiskExplanation(
   ascenseur: Ascenseur,
-  historique: EvenementHistorique[],
+  interventions: Intervention[],
   parc: ParcAscenseurs,
   score: number
 ): string {
-  const pannesRecentes = countPannesRecentes(historique, ascenseur.id, 30);
-  const joursDepuis = joursDepuisDerniereReparation(historique, ascenseur.id);
+  const interventionsRecentes = countInterventionsRecentes(interventions, ascenseur.id, 30);
+  const joursDepuis = joursDepuisDerniereIntervention(interventions, ascenseur.id);
   const level = getRiskLevel(score);
 
-  // Construction de l'explication
   let explication = '';
 
   if (level === RiskLevel.ELEVE) {
@@ -181,27 +178,28 @@ export function generateRiskExplanation(
     explication = 'Risque faible de panne. ';
   }
 
-  // Détails sur les pannes récentes
-  if (pannesRecentes === 0) {
-    explication += 'Aucune panne récente enregistrée. ';
-  } else if (pannesRecentes === 1) {
-    explication += '1 panne enregistrée dans les 30 derniers jours. ';
+  if (interventionsRecentes === 0) {
+    explication += 'Aucune intervention récente enregistrée. ';
+  } else if (interventionsRecentes === 1) {
+    explication += '1 intervention enregistrée dans les 30 derniers jours. ';
   } else {
-    explication += `${pannesRecentes} pannes enregistrées dans les 30 derniers jours. `;
+    explication += `${interventionsRecentes} interventions enregistrées dans les 30 derniers jours. `;
   }
 
-  // Détails sur la dernière réparation
   if (joursDepuis === 365) {
-    explication += 'Aucun historique de réparation disponible. ';
+    explication += 'Aucun historique d\'intervention clôturée disponible. ';
   } else if (joursDepuis < 7) {
-    explication += 'Réparation très récente (moins de 7 jours). ';
+    explication += 'Dernière intervention clôturée très récemment (moins de 7 jours). ';
   } else if (joursDepuis < 30) {
-    explication += `Dernière réparation il y a ${joursDepuis} jours. `;
+    explication += `Dernière intervention clôturée il y a ${joursDepuis} jours. `;
   } else {
-    explication += `Dernière réparation il y a plus de ${Math.floor(joursDepuis / 30)} mois. `;
+    explication += `Dernière intervention clôturée il y a plus de ${Math.floor(joursDepuis / 30)} mois. `;
   }
 
-  // Impact du type de parc
+  if (aUneInterventionOuverte(interventions, ascenseur.id)) {
+    explication += 'Une intervention est actuellement ouverte sur cet appareil. ';
+  }
+
   if (parc.type === TypeParc.TERTIAIRE) {
     explication += 'Usage intensif (parc tertiaire).';
   } else if (parc.type === TypeParc.COMMERCIAL) {
@@ -215,26 +213,17 @@ export function generateRiskExplanation(
 
 /**
  * Calcule le RiskScore complet (score + level + explication)
- * 
- * @param ascenseur L'ascenseur à évaluer
- * @param historique L'historique complet des événements
- * @param parc Le parc auquel appartient l'ascenseur
- * @returns Objet RiskScore complet
  */
 export function computeFullRiskScore(
   ascenseur: Ascenseur,
-  historique: EvenementHistorique[],
+  interventions: Intervention[],
   parc: ParcAscenseurs
 ): RiskScore {
-  const score = computeRiskScore(ascenseur, historique, parc);
+  const score = computeRiskScore(ascenseur, interventions, parc);
   const level = getRiskLevel(score);
-  const explication = generateRiskExplanation(ascenseur, historique, parc, score);
+  const explication = generateRiskExplanation(ascenseur, interventions, parc, score);
 
-  return {
-    score,
-    level,
-    explication,
-  };
+  return { score, level, explication };
 }
 
 /**
@@ -248,28 +237,12 @@ export function getRiskColor(level: RiskLevel): {
 } {
   switch (level) {
     case RiskLevel.FAIBLE:
-      return {
-        bg: 'bg-blue-50',
-        text: 'text-blue-700',
-        border: 'border-blue-200',
-      };
+      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' };
     case RiskLevel.MODERE:
-      return {
-        bg: 'bg-purple-50',
-        text: 'text-purple-700',
-        border: 'border-purple-200',
-      };
+      return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' };
     case RiskLevel.ELEVE:
-      return {
-        bg: 'bg-rose-50',
-        text: 'text-rose-700',
-        border: 'border-rose-200',
-      };
+      return { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' };
     default:
-      return {
-        bg: 'bg-gray-50',
-        text: 'text-gray-700',
-        border: 'border-gray-200',
-      };
+      return { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' };
   }
 }
