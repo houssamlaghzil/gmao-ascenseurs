@@ -5,7 +5,7 @@
  * Affiche un pourcentage ou score avec animation
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 
 interface GaugeChartProps {
   value: number; // 0-100
@@ -45,7 +45,7 @@ export default function GaugeChart({
   const progress = (percentage / 100) * circumference;
   const center = size / 2;
   
-  const gradientId = `gauge-gradient-${Math.random().toString(36).substr(2, 9)}`;
+  const gradientId = `gauge-gradient-${useId()}`;
 
   return (
     <div className={`flex flex-col items-center ${className}`}>

@@ -5,7 +5,7 @@
  * Affiche une courbe simple avec gradient et animation
  */
 
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
 
 interface SparklineProps {
   data: number[];
@@ -26,6 +26,7 @@ export default function Sparkline({
   showDots = false,
   className = '',
 }: SparklineProps) {
+  const reactId = useId();
   const { path, points, gradientId } = useMemo(() => {
     if (data.length === 0) return { path: '', points: [], gradientId: '' };
 
@@ -58,9 +59,9 @@ export default function Sparkline({
     return {
       path: pathD,
       points: pts,
-      gradientId: `sparkline-gradient-${Math.random().toString(36).substr(2, 9)}`,
+      gradientId: `sparkline-gradient-${reactId}`,
     };
-  }, [data, width, height]);
+  }, [data, width, height, reactId]);
 
   if (data.length === 0) {
     return (

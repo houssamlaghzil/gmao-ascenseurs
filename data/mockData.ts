@@ -2785,9 +2785,17 @@ const STATUTS_PRESENCE_PONDERES: ReadonlyArray<readonly [StatutPresenceTechnicie
   [StatutPresenceTechnicien.EN_LIGNE, 65], [StatutPresenceTechnicien.EN_PAUSE, 15], [StatutPresenceTechnicien.HORS_LIGNE, 20],
 ];
 
+// Ville "d'ancrage" de chaque technicien (celle de sa tournée titulaire, sinon
+// une ville tirée une seule fois) — réutilisée par tourneesDuJour ci-dessous
+// pour qu'un technicien sans tournée titulaire ne se voie jamais attribuer des
+// arrêts dispersés dans tout le pays.
+const villeAncrageParTechnicien = new Map<string, string>();
+
 export const positionsTechnicien: PositionTechnicien[] = techniciensActifs.map((tech) => {
   const tournee = tournees.find((t) => t.technicienTitulaireId === tech.id);
-  const ville = villeParNom(tournee?.ville ?? randPick(VILLES).nom);
+  const nomVille = tournee?.ville ?? randPick(VILLES).nom;
+  villeAncrageParTechnicien.set(tech.id, nomVille);
+  const ville = villeParNom(nomVille);
   const horsLigne = tech.id === TECH_SCENARIO_HORS_LIGNE;
   return {
     technicienId: tech.id,
@@ -2835,7 +2843,18 @@ export const tourneesDuJour: TourneeDuJour[] = positionsTechnicien
     const tournee = tournees.find((t) => t.technicienTitulaireId === tech.id);
     const appareilsTournee = tournee ? ascenseurs.filter((a) => a.tourneeId === tournee.id) : ascenseurs.filter((a) => a.technicienAffecteId === tech.id);
     const nbEtapes = Math.min(Math.max(4, appareilsTournee.length), 8);
-    const appareilsEtapes = appareilsTournee.length >= nbEtapes ? appareilsTournee.slice(0, nbEtapes) : Array.from({ length: nbEtapes }, () => randPick(ascenseurs));
+    // Secours géographique : si la tournée n'a pas assez d'appareils qui lui
+    // sont propres, on complète avec des appareils de la ville d'ancrage du
+    // technicien (sa tournée titulaire si elle existe, sinon la ville tirée
+    // pour lui dans positionsTechnicien) plutôt que du parc entier, pour ne
+    // jamais tracer une tournée qui saute d'une région à l'autre sur la carte
+    // (section 13).
+    const villeAncrage = tournee?.ville ?? villeAncrageParTechnicien.get(tech.id);
+    const poolSecours = villeAncrage ? ascenseurs.filter((a) => a.ville === villeAncrage) : appareilsTournee;
+    const appareilsEtapes =
+      appareilsTournee.length >= nbEtapes
+        ? appareilsTournee.slice(0, nbEtapes)
+        : Array.from({ length: nbEtapes }, () => randPick(poolSecours.length > 0 ? poolSecours : ascenseurs));
     const nbTerminees = randInt(1, nbEtapes - 1);
     const etapes: EtapeTournee[] = appareilsEtapes.map((asc, idx) => {
       const ville = villeParNom(asc.ville);
