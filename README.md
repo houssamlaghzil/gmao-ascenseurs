@@ -1,256 +1,126 @@
-# GMAO Ascenseurs - Application de Gestion de Parcs
+# Manei-Lift — Maquette GMAO Ascenseurs
 
-Application web complète de GMAO (Gestion de Maintenance Assistée par Ordinateur) spécialisée dans la gestion de parcs d'ascenseurs.
+Maquette fonctionnelle d'une future GMAO (Gestion de Maintenance Assistée par Ordinateur) pour un parc d'ascenseurs. L'objectif de cette maquette est de démontrer une interface moderne, rapide et structurée autour des urgences terrain, à l'opposé d'un outil legacy : pilotage du parc, interventions, maintenances contractuelles, contrôles quinquennaux (CTQ), planning technicien, et une simulation de l'application mobile utilisée sur le terrain.
 
-## 🎯 Objectif
+Ce n'est **pas** un produit final : les données sont générées en mémoire, il n'y a pas de vraie authentification, et l'application mobile est simulée par des écrans web dans un cadre téléphone plutôt qu'une véritable app Android.
 
-Démo fonctionnelle permettant de gérer plusieurs parcs d'ascenseurs, leurs équipements et les techniciens associés. L'application simule un environnement professionnel de gestion de maintenance avec un workflow complet de gestion des pannes.
+## Stack technique
 
-## 🛠️ Stack Technique
+- **Next.js 14** (App Router) / **React 18** / **TypeScript strict**
+- **Tailwind CSS** pour le style
+- **@dnd-kit** pour le drag & drop (planning)
+- **cmdk** pour la palette de commandes (Ctrl/Cmd+K, recherche globale)
+- **OpenAI (gpt-4o-mini)** pour la génération du rapport journalier en langage naturel
+- **Vitest** pour les tests unitaires du domaine métier
+- Aucune base de données : les données sont générées une fois en mémoire au démarrage du serveur (voir plus bas)
 
-- **Frontend**: React 18 avec TypeScript
-- **Framework**: Next.js 14 (App Router)
-- **Styling**: Tailwind CSS
-- **Icônes**: Lucide React
-- **Base de données**: Mock en mémoire (données réinitialisées à chaque redémarrage)
-- **Tests**: Vitest
-
-## 📋 Fonctionnalités
-
-### Entités Principales
-
-1. **Parcs d'Ascenseurs**
-   - Gestion de plusieurs parcs avec localisation
-   - Statistiques en temps réel par parc
-   
-2. **Ascenseurs**
-   - États : Fonctionnel, En panne, En cours de réparation
-   - Sous-états de panne : En cours d'attribution, Attribué
-   - Historique complet des événements
-   
-3. **Techniciens**
-   - Association many-to-many avec les parcs
-   - Suivi de la disponibilité
-   - Compteur de réparations en cours
-
-4. **Historique d'Événements**
-   - Timeline complète par ascenseur
-   - Types : Panne déclarée, Panne attribuée, Début réparation, Fin réparation, Retour fonctionnel
-
-### Workflow de Gestion des Pannes
+## Architecture
 
 ```
-Fonctionnel 
-    ↓ [Déclarer une panne]
-En Panne (En cours d'attribution)
-    ↓ [Attribuer un technicien]
-En Panne (Attribué)
-    ↓ [Démarrer la réparation]
-En Cours de Réparation
-    ↓ [Clôturer la réparation]
-Fonctionnel
+domain/            Modèle de données (types.ts) et logique métier (business-logic.ts,
+                    risk-scoring.ts) : deux machines à états indépendantes — le statut
+                    de l'appareil et le cycle de vie d'une intervention — plus les
+                    transitions des réserves CTQ. Aucune UI ni accès aux données ici.
+
+data/
+  mockData.ts       Génération procédurale du jeu de données (PRNG déterministe) +
+                     une couche de scénarios curés à la main pour la démonstration.
+  store.ts          Accès en lecture/écriture au jeu de données (getAllX/getXById/...).
+
+lib/
+  derived/          Calculs dérivés propres à un écran (SLA, planning, cartographie,
+                     libellés...) : jamais dans domain/ ou data/, pour que ces deux
+                     couches restent la source de vérité stable.
+  mobile-session.ts Résolution du technicien "connecté" côté mobile (cookie, sans
+                     vraie authentification).
+
+app/
+  <section>/        Un dossier par section de la navigation (parc, interventions,
+                     maintenances, ctq, planning, techniciens, contrats, integrations,
+                     administration, taches, rapports), Server Components lisant
+                     data/store directement, Server Actions pour les mutations.
+  mobile/           Simulation de l'application technicien, rendue dans un cadre
+                     téléphone (app/mobile/layout.tsx + components/PhoneFrame.tsx).
+  api/              Seulement ce qui a vraiment besoin d'une route HTTP : health
+                     check, génération du rapport IA, recherche globale.
+
+components/         Composants UI réutilisables (badges de statut, Card, Timeline
+                     générique, graphiques, palette de commandes...).
 ```
 
-### Pages et Navigation
+## Navigation
 
-- **Dashboard** : Vue d'ensemble de tous les parcs avec statistiques globales et notifications
-- **Détail d'un Parc** : Onglets Ascenseurs et Techniciens avec filtres
-- **Détail d'un Ascenseur** : Fiche complète avec actions contextuelles et historique
+Barre latérale à 11 sections : **Tableau de bord**, **Parc**, **Maintenances**, **Interventions**, **Rapports**, **CTQ / Réserves**, **Planning**, **Techniciens**, **Contrats**, **Intégrations**, **Administration** — plus un accès discret au **Centre de tâches asynchrones** en bas de la barre.
 
-## 🚀 Installation et Lancement
+## Écrans
 
-### Prérequis
+### Web
+Dashboard (KPI, urgences, activité récente, maintenance prédictive), Parc (liste filtrable/paginée + fiche appareil à 7 onglets), Maintenances (calendrier + vue prioritaire), Interventions (liste + détail avec chronologie, tickets regroupés, SLA, réattribution), Rapports (liste + détail + aperçu façon PDF, rapport journalier généré par IA), CTQ/Réserves, Planning (vue technicien + réaffectation par glisser-déposer) et Techniciens, Contrats, Intégrations, Administration, Cartographie (plan schématique SVG — aucune tuile cartographique externe), Centre de tâches asynchrones.
 
-- Node.js 18+ 
-- npm ou yarn
+### Mobile (simulation)
+Sous `/mobile` : connexion (choix d'un technicien de démonstration), accueil, ma tournée, fiche appareil, recherche, démarrage d'intervention (accès / état initial), diagnostic progressif en 6 étapes, clôture (état, mode dégradé, compte-rendu, photos, signatures), rapport isolé, maintenance (checklist, test téléalarme), CTQ/missions, centre de synchronisation, et un indicateur PTI/DATI.
 
-### Installation
+Le technicien "connecté" est déterminé par un simple cookie posé depuis `/mobile/connexion` (aucune authentification réelle). Six comptes illustrent des scénarios figés rejouables à volonté : technicien par défaut, hors ligne, synchronisation en cours, PTI en réactivation, PTI en mode intégration tierce, réaffectation née hors ligne.
+
+## Données de démonstration
+
+Générées de façon procédurale (PRNG à seed fixe, reproductible à chaque redémarrage) avec une couche de scénarios curés pour la démonstration :
+
+| Entité | Volume |
+|---|---|
+| Appareils | 4 348 |
+| Parcs (sites) | 500 |
+| Clients | 50 |
+| Contrats | 65 |
+| Techniciens | 70 |
+| Comptes utilisateurs | 132 |
+| Interventions | 4 050 |
+| Tickets | ~5 500 |
+| Maintenances (année en cours) | ~31 600 |
+| Contrôles CTQ | 650 |
+| Réserves CTQ | 1 474 |
+| Rapports détaillés / cumulés | 340 en mémoire, sur 348 214 cumulés (compteur agrégé, jamais matérialisés en masse) |
+
+## Installation et lancement
+
+### En local
 
 ```bash
-# Installer les dépendances
 npm install
-```
-
-### Lancement en développement
-
-```bash
-# Démarrer le serveur de développement
 npm run dev
+# http://localhost:3000 (ou le port configuré, voir ci-dessous)
 ```
-
-L'application sera accessible sur [http://localhost:3000](http://localhost:3000)
-
-### Build de production
 
 ```bash
-# Créer le build optimisé
-npm run build
-
-# Lancer la version de production
-npm start
+npm run build && npm start   # build de production
+npm test                     # tests unitaires du domaine métier
 ```
 
-### Tests
+### Variables d'environnement
+
+| Variable | Requise | Usage |
+|---|---|---|
+| `OPENAI_API_KEY` | Non | Génération du rapport journalier IA (`/rapports/journalier`). Sans elle, cette seule fonctionnalité renvoie une erreur explicite, le reste de l'application fonctionne normalement. |
+| `PORT` | Non | Port d'écoute (Docker Compose), 3000 par défaut. |
+
+### Docker
 
 ```bash
-# Lancer les tests unitaires
-npm test
-
-# Lancer les tests avec l'interface UI
-npm run test:ui
+docker compose up -d --build
 ```
 
-## 📁 Structure du Projet
+> **Port déjà utilisé sur l'hôte de déploiement (ex. Dokploy) ?** Le `docker-compose.yml` publie le port du conteneur directement sur l'hôte (`ports: "${PORT:-3000}:3000"`). Si votre plateforme gère déjà son propre reverse proxy (c'est le cas de Dokploy par défaut), il est préférable de ne pas publier ce port directement et de laisser la plateforme router vers le réseau interne du conteneur, plutôt que de se battre pour un port hôte libre.
 
-```
-gmao-ascenseurs/
-├── app/                          # Pages et routes Next.js (App Router)
-│   ├── api/                      # API Routes
-│   │   ├── parcs/               # Endpoints parcs
-│   │   ├── ascenseurs/          # Endpoints ascenseurs
-│   │   └── evenements/          # Endpoints événements
-│   ├── parcs/[id]/              # Page détail parc
-│   ├── ascenseurs/[id]/         # Page détail ascenseur
-│   ├── components/              # Composants spécifiques aux pages
-│   ├── layout.tsx               # Layout principal
-│   ├── page.tsx                 # Dashboard
-│   └── globals.css              # Styles globaux
-├── components/                   # Composants UI réutilisables
-│   ├── StatusBadge.tsx          # Badge de statut
-│   ├── EvenementBadge.tsx       # Badge d'événement
-│   ├── Card.tsx                 # Composant carte
-│   ├── StatCard.tsx             # Carte de statistiques
-│   ├── Timeline.tsx             # Chronologie d'événements
-│   ├── LoadingSpinner.tsx       # Indicateur de chargement
-│   └── ErrorMessage.tsx         # Message d'erreur
-├── domain/                       # Logique métier
-│   ├── types.ts                 # Types et énumérations
-│   ├── business-logic.ts        # Règles métier et transitions
-│   └── business-logic.test.ts   # Tests unitaires
-├── data/                         # Données mockées
-│   ├── mockData.ts              # Données initiales
-│   └── store.ts                 # Store en mémoire
-├── lib/                          # Utilitaires
-│   └── utils.ts                 # Fonctions helper
-└── README.md                     # Ce fichier
-```
+## Limites connues de la maquette
 
-## 🎨 Design et UX
+- **Pas de persistance réelle** : toutes les données sont régénérées en mémoire à chaque redémarrage du serveur.
+- **Pas de vraie authentification** ni de contrôle d'accès (l'écran Administration montre des rôles/permissions, mais rien n'est réellement appliqué ; la connexion mobile est un simple choix de technicien).
+- **Cartographie schématique** : positions dérivées de la ville de chaque site (jitter déterministe), pas de vraies coordonnées ni de tuiles cartographiques.
+- **Dictée vocale et signature** simulées visuellement (pas de reconnaissance vocale ni de capture de tracé réelle).
+- **PTI/DATI** simulé (les deux options du cahier des charges sont représentées, sans intégration à un vrai service tiers).
 
-### Palette de Couleurs
+## Scénario de démonstration conseillé
 
-- **Fonctionnel** : Vert (#10b981)
-- **En panne** : Rouge (#ef4444)
-- **En réparation** : Jaune/Orange (#f59e0b)
-- **Primaire** : Bleu (#0ea5e9)
+**Web** : tableau de bord → repérer un appareil à l'arrêt ou une intervention urgente → ouvrir l'intervention (remarquer les tickets multiples regroupés, le SLA, la réattribution) → fiche appareil (onglets Maintenances/CTQ/Historique) → planning (glisser-déposer une tâche).
 
-### Principes UX
-
-- Interface épurée et professionnelle
-- Navigation claire avec breadcrumbs
-- Actions contextuelles selon l'état
-- Retours visuels immédiats
-- Messages d'aide et tooltips
-- Responsive (desktop first, tablette compatible)
-
-## 🔍 Exploration de la Démo
-
-### Scénario de démonstration suggéré
-
-1. **Consulter le Dashboard**
-   - Observer les statistiques globales
-   - Consulter le panneau de notifications à droite
-   - Identifier les pannes récentes non attribuées (badge rouge)
-
-2. **Explorer un Parc**
-   - Cliquer sur un parc depuis le dashboard
-   - Observer les statistiques du parc
-   - Utiliser les filtres dans l'onglet Ascenseurs
-   - Consulter les techniciens associés
-
-3. **Gérer une Panne**
-   - Sélectionner un ascenseur fonctionnel
-   - Déclarer une panne avec un commentaire
-   - Attribuer un technicien
-   - Démarrer la réparation
-   - Clôturer et remettre en service
-   - Observer l'historique complet
-
-4. **Consulter l'Historique**
-   - Ouvrir un ascenseur qui a déjà un historique
-   - Observer la timeline des événements
-   - Noter les informations de temps relatif
-
-## 🧪 Tests
-
-Les tests unitaires couvrent la logique métier critique :
-
-- ✅ Déclaration de panne
-- ✅ Attribution de technicien
-- ✅ Démarrage de réparation
-- ✅ Clôture de réparation
-- ✅ Transitions impossibles
-- ✅ Scénario complet end-to-end
-
-Lancer les tests avec `npm test`
-
-## 💾 Données Mockées
-
-L'application contient des données préremplies :
-
-- **3 parcs** : Centre Ville, Résidentiel, Tertiaire
-- **15 ascenseurs** répartis sur les 3 parcs avec des états variés
-- **7 techniciens** avec spécialités différentes
-- **Historique** prérempli pour certains ascenseurs
-
-Les données sont en mémoire et se réinitialisent à chaque redémarrage du serveur.
-
-## 🔒 Règles Métier
-
-Les transitions d'état sont strictement contrôlées :
-
-- Un ascenseur fonctionnel peut passer en panne
-- Une panne doit être attribuée avant de démarrer une réparation
-- Seul un ascenseur en cours de réparation peut être clôturé
-- Impossible de passer directement de fonctionnel à en réparation
-
-Toutes les règles sont testées et documentées dans `domain/business-logic.ts`
-
-## 🎯 Points d'Attention
-
-### Qualité du Code
-
-- **TypeScript strict** : Typage complet sans `any`
-- **Organisation modulaire** : Séparation claire des responsabilités
-- **Commentaires** : Documentation des fonctions et règles métier importantes
-- **Tests** : Couverture des fonctions critiques
-
-### Performance
-
-- Server Components Next.js pour un rendu optimal
-- Client Components uniquement pour l'interactivité
-- Refresh sélectif avec `router.refresh()`
-
-### Accessibilité
-
-- Structure sémantique HTML
-- Labels et ARIA attributes
-- Contraste de couleurs respecté
-
-## 📝 Améliorations Futures Possibles
-
-- Persistance réelle avec base de données
-- Authentification et gestion des rôles
-- Filtres avancés et recherche
-- Export de rapports
-- Notifications push en temps réel
-- Version mobile native
-- Graphiques de statistiques avancés
-
-## 📄 Licence
-
-Application de démonstration - 2024
-
----
-
-**Développé avec Next.js 14, React 18 et TypeScript**
+**Mobile** : `/mobile/connexion` en tant que technicien par défaut → accueil (urgences, tournée du jour) → ouvrir une intervention depuis l'accueil → démarrage (accès, état initial) → diagnostic progressif → clôture (photos, signatures) → `/mobile/synchronisation` pour voir le scénario canonique de synchronisation (rapport synchronisé, photo en attente, intervention en cours d'envoi, rapport en échec avec "Réessayer").

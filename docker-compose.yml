@@ -12,9 +12,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        # Variables passées au build (pour NEXT_PUBLIC_*)
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
     image: gmao-ascenseurs:latest
     container_name: gmao-ascenseurs
     
