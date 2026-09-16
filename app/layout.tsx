@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import AppShell from './components/AppShell';
-import QueryProvider from '@/lib/react-query/QueryProvider';
 import CommandPalette from '@/components/CommandPalette';
 import { CommandPaletteProvider } from '@/lib/contexts/CommandPaletteContext';
 
@@ -21,14 +20,12 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body className={inter.className}>
-        <QueryProvider>
-          <CommandPaletteProvider>
-            <AppShell>{children}</AppShell>
+        <CommandPaletteProvider>
+          <AppShell>{children}</AppShell>
 
-            {/* Command Palette global */}
-            <CommandPalette />
-          </CommandPaletteProvider>
-        </QueryProvider>
+          {/* Command Palette global */}
+          <CommandPalette />
+        </CommandPaletteProvider>
       </body>
     </html>
   );

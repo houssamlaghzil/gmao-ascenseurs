@@ -6,9 +6,8 @@
 import { lazy, Suspense, ComponentType } from 'react';
 import LoadingSpinner from './LoadingSpinner';
 
-// Lazy load des modales (chargées uniquement quand nécessaires)
-export const LazyParcModal = lazy(() => import('@/app/gestion/components/ParcModal'));
-export const LazyAscenseurModal = lazy(() => import('@/app/gestion/components/AscenseurModal'));
+// Note : les anciens exports LazyParcModal/LazyAscenseurModal pointaient vers
+// app/gestion/components/*, supprimé (superseded par app/parc, section 4).
 
 // Wrapper avec Suspense pour gérer le chargement
 interface LazyWrapperProps {

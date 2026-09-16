@@ -1,71 +1,91 @@
-'use client';
-
 /**
- * Panneau de notifications affichant les événements récents
+ * Flux "Activité récente" du tableau de bord (cahier des charges, section
+ * 3.4) : fusion des dernières étapes d'intervention, maintenances validées,
+ * réserves CTQ soldées et échanges d'intégration, triés par date
+ * décroissante. Réécrit pour le nouveau modèle — l'ancienne version
+ * importait EvenementBadge/EvenementHistorique, qui n'existent plus.
  */
 
 import Card from '@/components/Card';
-import EvenementBadge from '@/components/EvenementBadge';
-import { formatDistanceToNow } from '@/lib/utils';
-import { EvenementHistorique, TypeEvenement } from '@/domain/types';
-import { Bell, AlertCircle } from 'lucide-react';
+import Timeline, { TimelineItem } from '@/components/Timeline';
+import StatutInterventionBadge from '@/components/StatutInterventionBadge';
+import { CategorieMaintenanceBadge, GraviteReserveBadge } from '@/components/StatusBadges';
+import { ActiviteRecenteItem } from '@/lib/derived/dashboard';
+import { TypeEtapeIntervention } from '@/domain/types';
+import { Plug } from 'lucide-react';
 
 interface NotificationsPanelProps {
-  evenements: EvenementHistorique[];
+  items: ActiviteRecenteItem[];
 }
 
-export default function NotificationsPanel({ evenements }: NotificationsPanelProps) {
-  // Mettre en évidence les pannes non attribuées (les plus récentes)
-  const pannesNonAttribuees = evenements.filter(
-    (evt) => evt.typeEvenement === TypeEvenement.PANNE_DECLAREE
-  );
+const LIBELLE_ETAPE: Record<TypeEtapeIntervention, string> = {
+  [TypeEtapeIntervention.SIGNALEMENT_RECU]: 'Signalement reçu',
+  [TypeEtapeIntervention.INTERVENTION_CREEE]: 'Intervention créée',
+  [TypeEtapeIntervention.TICKET_RATTACHE]: 'Ticket rattaché',
+  [TypeEtapeIntervention.TECHNICIEN_AFFECTE]: 'Technicien affecté',
+  [TypeEtapeIntervention.REATTRIBUEE]: 'Réattribuée',
+  [TypeEtapeIntervention.PRISE_EN_CHARGE]: 'Prise en charge',
+  [TypeEtapeIntervention.ARRIVEE_SUR_SITE]: 'Arrivée sur site',
+  [TypeEtapeIntervention.ACCES_REFUSE]: 'Accès refusé',
+  [TypeEtapeIntervention.RAPPORT_AJOUTE]: 'Rapport ajouté',
+  [TypeEtapeIntervention.ETAT_APPAREIL_CHANGE]: "État de l'appareil constaté",
+  [TypeEtapeIntervention.MISE_EN_ATTENTE_PIECE]: 'Mise en attente de pièce',
+  [TypeEtapeIntervention.REPRISE]: 'Reprise',
+  [TypeEtapeIntervention.RAPPORT_REJETE]: 'Rapport rejeté',
+  [TypeEtapeIntervention.TERMINEE]: 'Terminée',
+  [TypeEtapeIntervention.VALIDEE]: 'Validée',
+  [TypeEtapeIntervention.CLOTUREE]: 'Clôturée',
+  [TypeEtapeIntervention.COMMENTAIRE]: 'Commentaire',
+};
 
+function toTimelineItem(item: ActiviteRecenteItem): TimelineItem {
+  switch (item.source) {
+    case 'intervention':
+      return {
+        id: item.id,
+        dateHeure: item.dateHeure,
+        badge: <StatutInterventionBadge statut={item.statut} />,
+        description: `${LIBELLE_ETAPE[item.etape]} — Intervention ${item.numero} (${item.ascenseurCode})`,
+      };
+    case 'maintenance':
+      return {
+        id: item.id,
+        dateHeure: item.dateHeure,
+        badge: (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {item.categories.map((categorie) => (
+              <CategorieMaintenanceBadge key={categorie} categorie={categorie} />
+            ))}
+          </div>
+        ),
+        description: `Maintenance ${item.numero} réalisée — ${item.ascenseurCode}`,
+      };
+    case 'reserve':
+      return {
+        id: item.id,
+        dateHeure: item.dateHeure,
+        badge: <GraviteReserveBadge gravite={item.gravite} />,
+        description: `Réserve CTQ ${item.numero} validée — ${item.ascenseurCode}`,
+      };
+    case 'integration':
+      return {
+        id: item.id,
+        dateHeure: item.dateHeure,
+        badge: (
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+            <Plug className="h-3 w-3" />
+            {item.systeme.toUpperCase()}
+          </span>
+        ),
+        description: item.evenement,
+      };
+  }
+}
+
+export default function NotificationsPanel({ items }: NotificationsPanelProps) {
   return (
-    <Card
-      title="Notifications"
-      subtitle="Événements récents"
-      className="h-fit sticky top-20"
-    >
-      {/* Alerte pour pannes non attribuées */}
-      {pannesNonAttribuees.length > 0 && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-          <div className="flex items-center">
-            <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
-            <p className="text-sm font-medium text-red-800">
-              {pannesNonAttribuees.length} panne(s) récente(s) déclarée(s)
-            </p>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-3 max-h-[600px] overflow-y-auto">
-        {evenements.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">Aucune notification</p>
-          </div>
-        ) : (
-          evenements.map((evt) => (
-            <div
-              key={evt.id}
-              className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-primary-300 transition-colors"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <EvenementBadge type={evt.typeEvenement} />
-                <span className="text-xs text-gray-500">
-                  {formatDistanceToNow(new Date(evt.dateHeure))}
-                </span>
-              </div>
-              {evt.commentaire && (
-                <p className="text-sm text-gray-700 mt-2">{evt.commentaire}</p>
-              )}
-              <p className="text-xs text-gray-500 mt-1">
-                Ascenseur: {evt.ascenseurId}
-              </p>
-            </div>
-          ))
-        )}
-      </div>
+    <Card title="Activité récente" subtitle="Interventions, maintenances, réserves CTQ et intégrations">
+      <Timeline items={items.map(toTimelineItem)} emptyLabel="Aucune activité récente" />
     </Card>
   );
 }

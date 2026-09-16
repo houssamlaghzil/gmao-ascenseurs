@@ -22,6 +22,7 @@ import {
   Plug,
   Settings,
   Search,
+  ListTodo,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -74,6 +75,7 @@ export default function Navigation() {
       </nav>
 
       <div className="p-3 border-t border-gray-200 shrink-0">
+        <Link href="/taches" className="flex items-center gap-2 px-3 py-2 mb-1 text-sm text-gray-500 hover:text-blue-600 rounded-md hover:bg-gray-50 transition-colors"><ListTodo className="h-3.5 w-3.5" />Tâches</Link>
         <button
           onClick={toggle}
           className="flex items-center justify-between w-full gap-2 px-3 py-2 text-sm text-gray-500 hover:text-blue-600 border border-gray-200 rounded-md hover:border-blue-300 transition-colors"

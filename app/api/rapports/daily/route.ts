@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { 
-  getAllParcs, 
-  getAllAscenseurs, 
-  getRecentEvenements,
-  getAllStatistiques 
-} from '@/data/store';
+import { getAllParcs, getAllStatistiquesParc, getAllInterventions } from '@/data/store';
 
 export async function POST(request: Request) {
   try {
@@ -21,33 +16,34 @@ export async function POST(request: Request) {
 
     const { date } = await request.json();
     const reportDate = date || new Date().toISOString().split('T')[0];
-
-    // Récupérer toutes les données
-    const parcs = getAllParcs();
-    const ascenseurs = getAllAscenseurs();
-    const evenements = getRecentEvenements(50);
-    const statistiques = getAllStatistiques();
-
-    // Filtrer les événements du jour
     const today = new Date(reportDate);
-    const todayEvents = evenements.filter((e) => {
-      const eventDate = new Date(e.dateHeure);
-      return eventDate.toDateString() === today.toDateString();
+
+    const parcs = getAllParcs();
+    const statistiques = getAllStatistiquesParc();
+
+    // Interventions ouvertes ou clôturées aujourd'hui
+    const interventionsDuJour = getAllInterventions().filter((i) => {
+      const creeAujourdhui = new Date(i.dateCreation).toDateString() === today.toDateString();
+      const clotureeAujourdhui = i.dateCloture && new Date(i.dateCloture).toDateString() === today.toDateString();
+      return creeAujourdhui || clotureeAujourdhui;
     });
 
-    // Préparer les données pour OpenAI
     const statsGlobales = statistiques.reduce(
       (acc, stat) => ({
         totalAscenseurs: acc.totalAscenseurs + stat.totalAscenseurs,
-        nombreFonctionnels: acc.nombreFonctionnels + stat.nombreFonctionnels,
+        nombreEnService: acc.nombreEnService + stat.nombreEnService,
         nombreEnPanne: acc.nombreEnPanne + stat.nombreEnPanne,
-        nombreEnReparation: acc.nombreEnReparation + stat.nombreEnReparation,
+        nombreALArret: acc.nombreALArret + stat.nombreALArret,
+        nombreModeDegrade: acc.nombreModeDegrade + stat.nombreModeDegrade,
+        nombreArretTravaux: acc.nombreArretTravaux + stat.nombreArretTravaux,
       }),
       {
         totalAscenseurs: 0,
-        nombreFonctionnels: 0,
+        nombreEnService: 0,
         nombreEnPanne: 0,
-        nombreEnReparation: 0,
+        nombreALArret: 0,
+        nombreModeDegrade: 0,
+        nombreArretTravaux: 0,
       }
     );
 
@@ -57,19 +53,23 @@ Génère un rapport journalier détaillé et professionnel pour le ${reportDate}
 
 **Données globales:**
 - Nombre total de parcs: ${parcs.length}
-- Nombre total d'ascenseurs: ${statsGlobales.totalAscenseurs}
-- Ascenseurs fonctionnels: ${statsGlobales.nombreFonctionnels}
-- Ascenseurs en panne: ${statsGlobales.nombreEnPanne}
-- Ascenseurs en réparation: ${statsGlobales.nombreEnReparation}
+- Nombre total d'appareils: ${statsGlobales.totalAscenseurs}
+- En service: ${statsGlobales.nombreEnService}
+- En panne: ${statsGlobales.nombreEnPanne}
+- À l'arrêt: ${statsGlobales.nombreALArret}
+- En mode dégradé: ${statsGlobales.nombreModeDegrade}
+- En arrêt travaux: ${statsGlobales.nombreArretTravaux}
 
-**Événements du jour (${todayEvents.length}):**
-${todayEvents.map((e) => `- ${e.typeEvenement} (${e.dateHeure}): ${e.commentaire || 'N/A'}`).join('\n')}
+**Interventions du jour (${interventionsDuJour.length}):**
+${interventionsDuJour.map((i) => `- ${i.numero} — ${i.motif} (statut: ${i.statut})`).join('\n') || '- Aucune intervention créée ou clôturée aujourd\'hui'}
 
 **Statistiques par parc:**
-${statistiques.map((s) => {
-  const parc = parcs.find((p) => p.id === s.parcId);
-  return `- ${parc?.nom} (${parc?.ville}): ${s.totalAscenseurs} ascenseurs (${s.nombreFonctionnels} OK, ${s.nombreEnPanne} en panne, ${s.nombreEnReparation} en réparation)`;
-}).join('\n')}
+${statistiques
+  .map((s) => {
+    const parc = parcs.find((p) => p.id === s.parcId);
+    return `- ${parc?.nom} (${parc?.ville}): ${s.totalAscenseurs} appareils (${s.nombreEnService} en service, ${s.nombreEnPanne} en panne, ${s.nombreModeDegrade} en mode dégradé)`;
+  })
+  .join('\n')}
 
 Le rapport doit contenir:
 1. Un résumé exécutif
@@ -80,18 +80,15 @@ Le rapport doit contenir:
 
 Format le rapport en Markdown avec des sections claires. Sois concis mais informatif.`;
 
-    // Appeler OpenAI
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: 'Tu es un expert en maintenance d\'ascenseurs et en analyse de données GMAO. Tu génères des rapports professionnels, clairs et actionnables.',
+          content:
+            "Tu es un expert en maintenance d'ascenseurs et en analyse de données GMAO. Tu génères des rapports professionnels, clairs et actionnables.",
         },
-        {
-          role: 'user',
-          content: prompt,
-        },
+        { role: 'user', content: prompt },
       ],
       temperature: 0.7,
       max_tokens: 2000,
@@ -105,7 +102,7 @@ Format le rapport en Markdown avec des sections claires. Sois concis mais inform
         date: reportDate,
         rapport,
         statistiques: statsGlobales,
-        evenementsCount: todayEvents.length,
+        interventionsCount: interventionsDuJour.length,
       },
     });
   } catch (error) {
