@@ -8,7 +8,16 @@
 # -----------------------------------------------------------------------------
 FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
-WORKDIR /app
+
+# Le répertoire de build ne doit surtout PAS s'appeler /app. Ce projet utilise
+# l'App Router (dossier app/ à la racine) et l'alias tsconfig "@/*": ["./*"].
+# Next.js transforme "@/components/X" en chemin absolu "<racine>/components/X" ;
+# si la racine est /app, webpack traite "/app/components/X" comme une URL
+# server-relative et le re-résout aussi contre resolve.roots (= la racine),
+# ce qui donne "/app/app/components/X". Un fichier homonyme sous app/ gagne
+# alors silencieusement : bug invisible en développement (où la racine est
+# C:\... ou /home/...) qui casse la page une fois déployée.
+WORKDIR /srv/app
 
 COPY package.json package-lock.json* ./
 RUN npm ci --legacy-peer-deps --ignore-scripts
@@ -17,9 +26,9 @@ RUN npm ci --legacy-peer-deps --ignore-scripts
 # Stage 2: Builder - Build de l'application Next.js
 # -----------------------------------------------------------------------------
 FROM node:20-alpine AS builder
-WORKDIR /app
+WORKDIR /srv/app
 
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /srv/app/node_modules ./node_modules
 COPY . .
 
 # Désactiver la télémétrie Next.js
@@ -42,11 +51,11 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
 # Copier les fichiers nécessaires depuis le builder
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /srv/app/.next/standalone ./
+COPY --from=builder /srv/app/.next/static ./.next/static
 
 # Copier les fichiers de données (store JSON)
-COPY --from=builder --chown=nextjs:nodejs /app/data ./data
+COPY --from=builder --chown=nextjs:nodejs /srv/app/data ./data
 
 # Définir les permissions
 RUN chown -R nextjs:nodejs /app

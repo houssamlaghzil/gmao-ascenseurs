@@ -5,7 +5,9 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   test: {
-    environment: 'jsdom',
+    // Les tests portent sur la logique métier et la structure du dépôt, pas sur
+    // le DOM : 'jsdom' rendait toute la suite inexécutable (dépendance absente).
+    environment: 'node',
     globals: true,
   },
   resolve: {
