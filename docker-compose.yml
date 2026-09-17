@@ -1,10 +1,21 @@
 # =============================================================================
 # Docker Compose - GMAO Ascenseurs
 # =============================================================================
-# Usage:
+# Usage :
 #   1. Copier .env.example vers .env et renseigner les variables
 #   2. docker compose up -d --build
-#   3. Accéder à http://localhost:3000
+#
+# Ce fichier NE publie PAS de port sur l'hôte. Sur une plateforme qui gère
+# elle-même son reverse proxy (Dokploy, Traefik...), c'est la plateforme qui
+# route un domaine vers le port interne du conteneur (3000) via le réseau
+# Docker, sans jamais réserver ce port sur l'hôte lui-même — c'est ce qui
+# évite l'erreur "port is already allocated" dès qu'un autre service partage
+# le même hôte. Pour un accès direct en local (sans Dokploy), ajoute un
+# fichier docker-compose.override.yml avec :
+#   services:
+#     web:
+#       ports:
+#         - "3000:3000"
 # =============================================================================
 
 services:
@@ -26,10 +37,7 @@ services:
       - HOSTNAME=0.0.0.0
       # Variables runtime (non-NEXT_PUBLIC_*)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-    
-    ports:
-      - "${PORT:-3000}:3000"
-    
+
     # Volumes pour persister les données
     volumes:
       - gmao_data:/app/data

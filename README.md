@@ -101,7 +101,6 @@ npm test                     # tests unitaires du domaine métier
 | Variable | Requise | Usage |
 |---|---|---|
 | `OPENAI_API_KEY` | Non | Génération du rapport journalier IA (`/rapports/journalier`). Sans elle, cette seule fonctionnalité renvoie une erreur explicite, le reste de l'application fonctionne normalement. |
-| `PORT` | Non | Port d'écoute (Docker Compose), 3000 par défaut. |
 
 ### Docker
 
@@ -109,7 +108,16 @@ npm test                     # tests unitaires du domaine métier
 docker compose up -d --build
 ```
 
-> **Port déjà utilisé sur l'hôte de déploiement (ex. Dokploy) ?** Le `docker-compose.yml` publie le port du conteneur directement sur l'hôte (`ports: "${PORT:-3000}:3000"`). Si votre plateforme gère déjà son propre reverse proxy (c'est le cas de Dokploy par défaut), il est préférable de ne pas publier ce port directement et de laisser la plateforme router vers le réseau interne du conteneur, plutôt que de se battre pour un port hôte libre.
+Le conteneur écoute sur le port interne 3000, mais `docker-compose.yml` ne publie **aucun** port sur l'hôte : sur une plateforme qui gère son propre reverse proxy (Dokploy, Traefik...), c'est elle qui route un domaine vers ce port via le réseau Docker interne, sans jamais réserver le port sur l'hôte — c'est ce qui évite l'erreur `port is already allocated` dès qu'un autre service partage le même hôte.
+
+Pour un accès direct en local (sans plateforme de routage), ajoute un `docker-compose.override.yml` :
+
+```yaml
+services:
+  web:
+    ports:
+      - "3000:3000"
+```
 
 ## Limites connues de la maquette
 
