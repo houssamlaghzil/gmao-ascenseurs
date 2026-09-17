@@ -1,0 +1,11 @@
+Inter — Copyright (c) 2016-2024 The Inter Project Authors
+(https://github.com/rsms/inter)
+
+Distribuée sous la SIL Open Font License, Version 1.1 :
+https://openfontlicense.org
+
+Fichier : inter-latin-variable.woff2
+Sous-ensemble « latin » de la variante variable (poids 100 à 900), tel que
+servi par Google Fonts. Copié dans le dépôt parce que le serveur de
+déploiement n'a pas d'accès sortant vers fonts.googleapis.com : le build
+échouait alors sur « Failed to fetch `Inter` from Google Fonts ».
