@@ -6,7 +6,7 @@
  * d'appareils/clients/interventions.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Command } from 'cmdk';
 import {
@@ -48,11 +48,90 @@ interface RechercheResultats {
   interventions: { id: string; numero: string; statut: string }[];
 }
 
+/** Durée de la disparition — doit rester alignée sur --duree-sortie. */
+const DUREE_SORTIE_MS = 280;
+
+type EtatPalette = 'ferme' | 'ouvert' | 'sortie';
+
 export default function CommandPalette() {
-  const { open, setOpen, toggle } = useCommandPalette();
+  const { open, setOpen, toggle, ancreRef } = useCommandPalette();
   const [search, setSearch] = useState('');
   const [resultats, setResultats] = useState<RechercheResultats>({ appareils: [], clients: [], interventions: [] });
   const router = useRouter();
+
+  /*
+   * Le panneau reste monté pendant sa disparition : le démonter au moment où
+   * `open` repasse à false supprimerait l'élément avant que la transition de
+   * sortie ait pu jouer.
+   */
+  const [monte, setMonte] = useState(false);
+  const panneauRef = useRef<HTMLDivElement>(null);
+  const voileRef = useRef<HTMLDivElement>(null);
+
+  /*
+   * L'état d'animation est écrit directement dans le DOM plutôt que tenu dans
+   * un state React. Une transition CSS n'existe que si le navigateur a calculé
+   * l'état de départ avant de recevoir l'état d'arrivée ; en passant par React,
+   * les deux changements peuvent être regroupés dans le même rendu et rien
+   * n'est alors animé. Ici la séquence est explicite et vérifiable :
+   * poser le départ, forcer son calcul, poser l'arrivée.
+   */
+  const poserEtat = useCallback((valeur: EtatPalette) => {
+    panneauRef.current?.setAttribute('data-etat', valeur);
+    voileRef.current?.setAttribute('data-etat', valeur === 'ouvert' ? 'ouvert' : 'ferme');
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      setMonte(true);
+      return;
+    }
+    if (!monte) return;
+    poserEtat('sortie');
+    const fin = setTimeout(() => setMonte(false), DUREE_SORTIE_MS);
+    return () => clearTimeout(fin);
+  }, [open, monte, poserEtat]);
+
+  /*
+   * Mesure du trajet, juste après le montage et avant peinture.
+   *
+   * Le CSS ne peut pas connaître la position du bouton déclencheur : on calcule
+   * ici la translation et l'échelle qui superposent le coin haut-gauche du
+   * panneau à celui du bouton (d'où `transform-origin: top left`), puis on
+   * laisse la transition ramener le panneau à sa place réelle.
+   */
+  useLayoutEffect(() => {
+    if (!monte) return;
+    const panneau = panneauRef.current;
+    if (!panneau) return;
+
+    /*
+     * On mesure le conteneur de centrage, pas le panneau : le panneau porte
+     * déjà la transformation de l'état fermé, donc `getBoundingClientRect` y
+     * renverrait une boîte réduite et l'échelle calculée serait fausse — à
+     * l'usage, le panneau grossissait au lieu de rétrécir vers le bouton.
+     */
+    const boite = (panneau.parentElement ?? panneau).getBoundingClientRect();
+    const ancre = ancreRef.current?.getBoundingClientRect();
+
+    if (ancre && boite.width > 0 && boite.height > 0) {
+      panneau.style.setProperty('--px', `${ancre.left - boite.left}px`);
+      panneau.style.setProperty('--py', `${ancre.top - boite.top}px`);
+      panneau.style.setProperty('--pe', `${Math.max(ancre.width / boite.width, 0.1)}`);
+    } else {
+      // Pas d'ancre connue (barre latérale masquée) : repli sur une éclosion
+      // centrée, discrète, plutôt qu'un surgissement sec.
+      panneau.style.setProperty('--px', '0px');
+      panneau.style.setProperty('--py', '16px');
+      panneau.style.setProperty('--pe', '0.94');
+    }
+
+    poserEtat('ferme');
+    // Lecture de mise en page : oblige le navigateur à calculer l'état de
+    // départ. Sans elle, il ne verrait que l'état d'arrivée et n'animerait rien.
+    void panneau.offsetHeight;
+    poserEtat('ouvert');
+  }, [monte, ancreRef, poserEtat]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -88,13 +167,23 @@ export default function CommandPalette() {
     [setOpen]
   );
 
-  if (!open) return null;
+  if (!monte) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50">
+      <div
+        ref={voileRef}
+        className="palette-voile absolute inset-0"
+        data-etat="ferme"
+        onClick={() => setOpen(false)}
+        aria-hidden
+      />
+      {/* Le centrage et le mouvement sont portés par deux éléments distincts :
+          les deux passent par `transform`, et le second écraserait le premier. */}
       <div className="fixed left-[50%] top-[40%] -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl">
-        <Command className="rounded-lg border border-gray-200 bg-white shadow-2xl">
-          <div className="flex items-center border-b border-gray-200 px-4">
+        <div ref={panneauRef} className="palette-panneau" data-etat="ferme">
+          <Command className="rounded-lg border border-gray-200 bg-white shadow-2xl">
+          <div className="palette-contenu flex items-center border-b border-gray-200 px-4">
             <Search className="h-5 w-5 text-gray-400 mr-2" />
             <Command.Input
               value={search}
@@ -107,7 +196,7 @@ export default function CommandPalette() {
             </button>
           </div>
 
-          <Command.List className="max-h-[400px] overflow-y-auto p-2">
+          <Command.List className="palette-contenu max-h-[400px] overflow-y-auto p-2">
             <Command.Empty className="py-6 text-center text-sm text-gray-500">Aucun résultat trouvé.</Command.Empty>
 
             <Command.Group heading="Pages" className="text-xs font-semibold text-gray-500 px-2 py-2">
@@ -178,7 +267,7 @@ export default function CommandPalette() {
             )}
           </Command.List>
 
-          <div className="border-t border-gray-200 px-4 py-2 text-xs text-gray-500 flex items-center justify-between">
+          <div className="palette-contenu border-t border-gray-200 px-4 py-2 text-xs text-gray-500 flex items-center justify-between">
             <span>
               Appuyez sur <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">Échap</kbd> pour fermer
             </span>
@@ -187,7 +276,8 @@ export default function CommandPalette() {
               <kbd className="px-2 py-1 bg-gray-100 rounded text-xs ml-1">↓</kbd> pour naviguer
             </span>
           </div>
-        </Command>
+          </Command>
+        </div>
       </div>
     </div>
   );

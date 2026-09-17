@@ -1,30 +1,39 @@
 'use client';
 
 /**
- * Contexte pour gérer l'état du Command Palette
- * Permet d'ouvrir le palette depuis n'importe où dans l'app
+ * État de la palette de recherche, partagé par la barre latérale (qui porte le
+ * bouton déclencheur) et par la palette elle-même.
+ *
+ * Le contexte transporte aussi l'**ancre** : l'élément depuis lequel la palette
+ * doit paraître surgir. La barre latérale enregistre son bouton « Rechercher »,
+ * et la palette mesure cet élément à l'ouverture pour se déplier depuis sa
+ * position exacte. C'est ce qui rend le mouvement crédible : la surface ne
+ * surgit pas de nulle part, elle vient d'où l'utilisateur a cliqué — et le
+ * raccourci clavier produit le même mouvement, puisque l'ancre ne dépend pas
+ * du geste qui a ouvert la palette.
  */
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState, MutableRefObject, ReactNode } from 'react';
 
 interface CommandPaletteContextType {
   open: boolean;
   setOpen: (open: boolean) => void;
   toggle: () => void;
+  /** Référence vers le bouton déclencheur, renseignée par la barre latérale. */
+  ancreRef: MutableRefObject<HTMLElement | null>;
 }
 
 const CommandPaletteContext = createContext<CommandPaletteContextType | undefined>(undefined);
 
 export function CommandPaletteProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const ancreRef = useRef<HTMLElement | null>(null);
 
-  const toggle = () => setOpen(prev => !prev);
+  const toggle = useCallback(() => setOpen((prev) => !prev), []);
 
-  return (
-    <CommandPaletteContext.Provider value={{ open, setOpen, toggle }}>
-      {children}
-    </CommandPaletteContext.Provider>
-  );
+  const valeur = useMemo(() => ({ open, setOpen, toggle, ancreRef }), [open, toggle]);
+
+  return <CommandPaletteContext.Provider value={valeur}>{children}</CommandPaletteContext.Provider>;
 }
 
 export function useCommandPalette() {
