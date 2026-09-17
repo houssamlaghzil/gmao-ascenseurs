@@ -5,15 +5,19 @@
  * domain/business-logic.ts, domain/risk-scoring.ts ni data/store.ts — il ne
  * fait que composer leurs fonctions/exports existants. Les calculs restent
  * volontairement simples (pas de moteur BI) : l'objectif est une démo
- * crédible et lisible, recalculée à chaque rendu (pages `force-dynamic`).
+ * crédible et lisible.
  *
  * Simples ne veut pas dire répétés : le tableau de bord est la page la plus
  * consultée, et ses treize fonctions exportées lisaient chacune les mêmes
  * tableaux bruts pour leur propre compte. Les compteurs globaux passent donc
  * par les agrégats partagés ci-dessous (un seul parcours par tableau, mémoïsé
- * pour la durée de la requête) et les lectures par clé étrangère par les accès
- * indexés du store (`getXByY`) plutôt que par un `filter()` maison. Chaque
- * fonction exportée rend exactement les mêmes valeurs qu'avant.
+ * pour la durée de la requête), les lectures par clé étrangère par les accès
+ * indexés du store (`getXByY`) plutôt que par un `filter()` maison, et dix des
+ * treize fonctions exportées par un cache de calcul ENTRE les requêtes
+ * (lib/derived/cache-calcul.ts, clé = version des données ± minute courante) —
+ * voir docs/superpowers/specs/2026-09-17-cache-calcul-et-rendu-design.md pour
+ * le détail architectural. Chaque fonction exportée rend exactement les mêmes
+ * valeurs qu'avant.
  */
 
 import { cache as cacheReact } from 'react';
@@ -53,7 +57,9 @@ import {
   getRiskScoreForAscenseur,
   getTechnicienById,
   getTicketsNonRapproches,
+  getVersionDonnees,
 } from '@/data/store';
+import { memoiserSurVersion, memoiserSurVersionEtMinute } from './cache-calcul';
 import { calculerEtatSLA, estInterventionHorsSLA } from './sla';
 
 // ============================================================================
@@ -252,7 +258,7 @@ export function getPrioriteAffichageMaintenance(
   return PrioriteAffichageMaintenance.A_VENIR;
 }
 
-export function getKpisTableauDeBord(maintenant: Date = new Date()): KpisTableauDeBord {
+function getKpisTableauDeBordImpl(maintenant: Date = new Date()): KpisTableauDeBord {
   const parc = agregatsParc();
   const interventions = agregatsInterventions();
 
@@ -280,6 +286,8 @@ export function getKpisTableauDeBord(maintenant: Date = new Date()): KpisTableau
     ticketsNonAffectes: getTicketsNonRapproches().length,
   };
 }
+
+export const getKpisTableauDeBord = memoiserSurVersionEtMinute(getVersionDonnees, getKpisTableauDeBordImpl);
 
 // ============================================================================
 // 3.2 — Graphiques et tendances
@@ -346,7 +354,7 @@ const MOIS_AFFICHES = 3;
  * prévue serait un mensonge), et évidemment aucune panne — une panne ne se
  * prévoit pas.
  */
-export function getActiviteParJour(_nbJoursIgnore?: number): JourActivite[] {
+function getActiviteParJourImpl(_nbJoursIgnore?: number): JourActivite[] {
   const aujourdhui = new Date();
   aujourdhui.setHours(0, 0, 0, 0);
   const cleAujourdhui = cleJourLocale(aujourdhui);
@@ -422,12 +430,16 @@ export function getActiviteParJour(_nbJoursIgnore?: number): JourActivite[] {
   return jours;
 }
 
+export const getActiviteParJour = memoiserSurVersionEtMinute(getVersionDonnees, getActiviteParJourImpl);
+
 /** Taux de disponibilité strict du parc (part des appareils EN_SERVICE), 0-100. */
-export function getTauxDisponibiliteParc(): number {
+function getTauxDisponibiliteParcImpl(): number {
   const { total, enService } = agregatsParc();
   if (total === 0) return 100;
   return Math.round((enService / total) * 100);
 }
+
+export const getTauxDisponibiliteParc = memoiserSurVersion(getVersionDonnees, getTauxDisponibiliteParcImpl);
 
 export interface SegmentRepartition {
   value: number;
@@ -436,7 +448,7 @@ export interface SegmentRepartition {
 }
 
 /** Répartition interventions ouvertes / clôturées (toutes périodes confondues). */
-export function getRepartitionInterventions(): SegmentRepartition[] {
+function getRepartitionInterventionsImpl(): SegmentRepartition[] {
   const { ouvertes, cloturees } = agregatsInterventions();
   return [
     { value: ouvertes, color: '#6366f1', label: 'Ouvertes' },
@@ -444,8 +456,10 @@ export function getRepartitionInterventions(): SegmentRepartition[] {
   ];
 }
 
+export const getRepartitionInterventions = memoiserSurVersion(getVersionDonnees, getRepartitionInterventionsImpl);
+
 /** Répartition des maintenances par statut — mêmes couleurs que StatutMaintenanceBadge. */
-export function getRepartitionMaintenances(): SegmentRepartition[] {
+function getRepartitionMaintenancesImpl(): SegmentRepartition[] {
   const compteurs = agregatsMaintenances().parStatut;
   return [
     { value: compteurs.get(StatutMaintenance.PLANIFIEE) ?? 0, color: '#0ea5e9', label: 'Planifiées' },
@@ -454,6 +468,8 @@ export function getRepartitionMaintenances(): SegmentRepartition[] {
     { value: compteurs.get(StatutMaintenance.ANNULEE) ?? 0, color: '#9ca3af', label: 'Annulées' },
   ];
 }
+
+export const getRepartitionMaintenances = memoiserSurVersion(getVersionDonnees, getRepartitionMaintenancesImpl);
 
 /** Couleurs catégorielles fixes par motif — ordre de l'enum, jamais réattribuées selon le rang. */
 const COULEUR_MOTIF: Record<MotifIntervention, string> = {
@@ -479,12 +495,14 @@ const LIBELLE_MOTIF: Record<MotifIntervention, string> = {
 };
 
 /** Répartition des causes de panne par MotifIntervention — palette catégorielle fixe. */
-export function getRepartitionCausesPanne(): SegmentRepartition[] {
+function getRepartitionCausesPanneImpl(): SegmentRepartition[] {
   const compteurs = agregatsInterventions().parMotif;
   return (Object.values(MotifIntervention) as MotifIntervention[])
     .map((motif) => ({ value: compteurs.get(motif) ?? 0, color: COULEUR_MOTIF[motif], label: LIBELLE_MOTIF[motif] }))
     .filter((segment) => segment.value > 0);
 }
+
+export const getRepartitionCausesPanne = memoiserSurVersion(getVersionDonnees, getRepartitionCausesPanneImpl);
 
 /**
  * Taux global de respect du SLA (0-100), toutes interventions confondues.
@@ -495,12 +513,14 @@ export function getRepartitionCausesPanne(): SegmentRepartition[] {
  * prédicat `estInterventionHorsSLA`. On passe par le décompte partagé plutôt
  * que par un `filter()` supplémentaire sur les 4 050 interventions.
  */
-export function getTauxRespectSLAGlobal(): number {
+function getTauxRespectSLAGlobalImpl(): number {
   const { total } = agregatsInterventions();
   if (total === 0) return 100;
   const horsSLA = compteurInterventionsHorsSLA(Date.now());
   return Math.round(((total - horsSLA) / total) * 100);
 }
+
+export const getTauxRespectSLAGlobal = memoiserSurVersionEtMinute(getVersionDonnees, getTauxRespectSLAGlobalImpl);
 
 export interface ChargeTechnicien {
   id: string;
@@ -529,7 +549,7 @@ const STATUTS_INTERVENTION_ACTIFS: StatutIntervention[] = [
  * interventions et des 31 777 maintenances — dont l'écrasante majorité est
  * déjà réalisée ou clôturée — pour ne garder que les techniciens actifs.
  */
-export function getChargeTechniciens(limit = 8): ChargeTechnicien[] {
+function getChargeTechniciensImpl(limit = 8): ChargeTechnicien[] {
   return getAllTechniciens()
     .filter((t) => t.actif)
     .map((t) => {
@@ -550,6 +570,12 @@ export function getChargeTechniciens(limit = 8): ChargeTechnicien[] {
     .slice(0, limit);
 }
 
+export const getChargeTechniciens = memoiserSurVersion(
+  getVersionDonnees,
+  getChargeTechniciensImpl,
+  (limit) => String(limit)
+);
+
 // ============================================================================
 // Maintenance prédictive — score de risque (préservé depuis l'ancien dashboard)
 // ============================================================================
@@ -560,7 +586,7 @@ export interface AscenseurAvecRisque {
 }
 
 /** Score de risque de tous les appareils — calculé une fois, réutilisé par le top risque et les urgences. */
-export function getAscenseursAvecRisque(): AscenseurAvecRisque[] {
+function getAscenseursAvecRisqueImpl(): AscenseurAvecRisque[] {
   const resultat: AscenseurAvecRisque[] = [];
   for (const ascenseur of instantaneAscenseurs()) {
     const risk = getRiskScoreForAscenseur(ascenseur.id);
@@ -568,6 +594,8 @@ export function getAscenseursAvecRisque(): AscenseurAvecRisque[] {
   }
   return resultat;
 }
+
+export const getAscenseursAvecRisque = memoiserSurVersionEtMinute(getVersionDonnees, getAscenseursAvecRisqueImpl);
 
 export interface AscenseurRisqueAffiche extends AscenseurAvecRisque {
   tendance7j: number[]; // nombre d'interventions créées par jour, 7 derniers jours
@@ -828,7 +856,7 @@ function plusRecents<T>(elements: T[], horodatage: (element: T) => string, combi
     .map(({ element }) => element);
 }
 
-export function getActiviteRecente(limit = 15): ActiviteRecenteItem[] {
+function getActiviteRecenteImpl(limit = 15): ActiviteRecenteItem[] {
   const candidatsParSource = Math.max(limit, 20);
 
   const interventionsItems: ActiviteRecenteItem[] = plusRecents(
@@ -897,4 +925,10 @@ export function getActiviteRecente(limit = 15): ActiviteRecenteItem[] {
   );
   return limiterParSource(fusion, limit, Math.max(3, Math.ceil((limit * 2) / 5)));
 }
+
+export const getActiviteRecente = memoiserSurVersion(
+  getVersionDonnees,
+  getActiviteRecenteImpl,
+  (limit) => String(limit)
+);
 

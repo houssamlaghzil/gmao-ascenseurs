@@ -24,31 +24,51 @@ const magasin = vi.hoisted(() => ({
   maintenances: [] as Maintenance[],
 }));
 
-vi.mock('@/data/store', () => ({
-  getAllInterventions: () => magasin.interventions,
-  getAllMaintenances: () => magasin.maintenances,
-  getAllAscenseurs: () => [],
-  getAllIntegrationsExternes: () => [],
-  getAllJournalEchangesIntegration: () => [],
-  getAllEvenementsReserve: () => [],
-  getAllTechniciens: () => [],
-  getAllTickets: () => [],
-  getAscenseurById: () => undefined,
-  getEntreesJournalModificationByAscenseurId: () => [],
-  getReserveCTQById: () => undefined,
-  getRiskScoreForAscenseur: () => undefined,
-  getTechnicienById: () => undefined,
-  // Lectures par clé étrangère du store : même résultat que le filtrage
-  // manuel qu'elles remplacent dans dashboard.ts, l'implémentation réelle
-  // n'étant qu'un accès indexé aux mêmes tableaux.
-  getInterventionsByAscenseurId: (ascenseurId: string) =>
-    magasin.interventions.filter((i) => i.ascenseurId === ascenseurId),
-  getInterventionsByTechnicienId: (technicienId: string) =>
-    magasin.interventions.filter((i) => i.technicienId === technicienId),
-  getMaintenancesByTechnicienId: (technicienId: string) =>
-    magasin.maintenances.filter((m) => m.technicienId === technicienId),
-  getTicketsNonRapproches: () => [],
-}));
+vi.mock('@/data/store', () => {
+  // Ajout strictement additif : `dashboard.ts` mémoïse désormais dix de ses
+  // fonctions exportées sur la version des données (lib/derived/cache-calcul.ts).
+  // Le magasin simulé reproduit ce compteur — les tests remplacent toujours les
+  // tableaux (jamais de mutation en place), un changement d'identité vaut donc
+  // exactement une mutation, comme l'`invaliderIndexes()` du vrai store.
+  let version = 0;
+  let dernieresInterventions: unknown = null;
+  let dernieresMaintenances: unknown = null;
+  const getVersionDonnees = (): number => {
+    if (magasin.interventions !== dernieresInterventions || magasin.maintenances !== dernieresMaintenances) {
+      dernieresInterventions = magasin.interventions;
+      dernieresMaintenances = magasin.maintenances;
+      version++;
+    }
+    return version;
+  };
+
+  return {
+    getVersionDonnees,
+    getAllInterventions: () => magasin.interventions,
+    getAllMaintenances: () => magasin.maintenances,
+    getAllAscenseurs: () => [],
+    getAllIntegrationsExternes: () => [],
+    getAllJournalEchangesIntegration: () => [],
+    getAllEvenementsReserve: () => [],
+    getAllTechniciens: () => [],
+    getAllTickets: () => [],
+    getAscenseurById: () => undefined,
+    getEntreesJournalModificationByAscenseurId: () => [],
+    getReserveCTQById: () => undefined,
+    getRiskScoreForAscenseur: () => undefined,
+    getTechnicienById: () => undefined,
+    // Lectures par clé étrangère du store : même résultat que le filtrage
+    // manuel qu'elles remplacent dans dashboard.ts, l'implémentation réelle
+    // n'étant qu'un accès indexé aux mêmes tableaux.
+    getInterventionsByAscenseurId: (ascenseurId: string) =>
+      magasin.interventions.filter((i) => i.ascenseurId === ascenseurId),
+    getInterventionsByTechnicienId: (technicienId: string) =>
+      magasin.interventions.filter((i) => i.technicienId === technicienId),
+    getMaintenancesByTechnicienId: (technicienId: string) =>
+      magasin.maintenances.filter((m) => m.technicienId === technicienId),
+    getTicketsNonRapproches: () => [],
+  };
+});
 
 import { getActiviteParJour, getTopAscenseursRisque, type AscenseurAvecRisque, type JourActivite } from './dashboard';
 import type { Ascenseur } from '@/domain/types';
