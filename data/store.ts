@@ -77,6 +77,7 @@ import {
   StatutValidationRapport,
   StatutAppareil,
 } from '@/domain/types';
+import { revalidatePath } from 'next/cache';
 import { computeFullRiskScore } from '@/domain/risk-scoring';
 import {
   secteursGeographiques as initialSecteursGeographiques,
@@ -199,8 +200,20 @@ let indexesConstruits: Indexes | null = null;
 let versionIndexes = 0;
 let versionIndexesConstruits = -1;
 
+/** Version courante des données — s'incrémente à chaque mutation. Sert de clé au cache de calcul entre requêtes (lib/derived/cache-calcul.ts). */
+export function getVersionDonnees(): number {
+  return versionIndexes;
+}
+
 function invaliderIndexes(): void {
   versionIndexes++;
+  try {
+    revalidatePath('/', 'layout');
+  } catch {
+    // Hors contexte de requête Next.js (tests, scripts, build) : la
+    // revalidation du cache de rendu ne s'applique pas, seul le compteur de
+    // version compte alors — voir le cache de calcul (lib/derived/cache-calcul.ts).
+  }
 }
 
 function obtenirIndexes(): Indexes {
@@ -1030,7 +1043,7 @@ export function getRiskScoreForAscenseur(ascenseurId: string): RiskScore | null 
   if (!ascenseur) return null;
   const parc = getParcById(ascenseur.parcId);
   if (!parc) return null;
-  return computeFullRiskScore(ascenseur, interventions, parc);
+  return computeFullRiskScore(ascenseur, getInterventionsByAscenseurId(ascenseurId), parc);
 }
 
 /** Statistiques d'un parc, ventilées par StatutAppareil. */
