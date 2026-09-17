@@ -6,8 +6,17 @@
  * fait que composer leurs fonctions/exports existants. Les calculs restent
  * volontairement simples (pas de moteur BI) : l'objectif est une démo
  * crédible et lisible, recalculée à chaque rendu (pages `force-dynamic`).
+ *
+ * Simples ne veut pas dire répétés : le tableau de bord est la page la plus
+ * consultée, et ses treize fonctions exportées lisaient chacune les mêmes
+ * tableaux bruts pour leur propre compte. Les compteurs globaux passent donc
+ * par les agrégats partagés ci-dessous (un seul parcours par tableau, mémoïsé
+ * pour la durée de la requête) et les lectures par clé étrangère par les accès
+ * indexés du store (`getXByY`) plutôt que par un `filter()` maison. Chaque
+ * fonction exportée rend exactement les mêmes valeurs qu'avant.
  */
 
+import { cache as cacheReact } from 'react';
 import {
   Ascenseur,
   CategorieMaintenance,
@@ -23,7 +32,6 @@ import {
   StatutConnexionIntegration,
   StatutIntervention,
   StatutMaintenance,
-  StatutTicket,
   SystemeExterne,
   TypeEtapeIntervention,
   TypeEvenementReserve,
@@ -36,14 +44,175 @@ import {
   getAllMaintenances,
   getAllEvenementsReserve,
   getAllTechniciens,
-  getAllTickets,
   getAscenseurById,
   getEntreesJournalModificationByAscenseurId,
+  getInterventionsByAscenseurId,
+  getInterventionsByTechnicienId,
+  getMaintenancesByTechnicienId,
   getReserveCTQById,
   getRiskScoreForAscenseur,
   getTechnicienById,
+  getTicketsNonRapproches,
 } from '@/data/store';
-import { calculerEtatSLA, calculerTauxRespectSLA, estInterventionHorsSLA } from './sla';
+import { calculerEtatSLA, estInterventionHorsSLA } from './sla';
+
+// ============================================================================
+// Passages partagés sur les tableaux bruts
+// ============================================================================
+
+/**
+ * Mémoïsation pour la durée d'une requête — même repli que
+ * lib/derived/explorer.ts : `cache()` n'est fourni que par le React que
+ * Next.js résout côté serveur, il est absent du React que voient le lanceur
+ * de tests et le bundle client. Hors Next, l'appel passe directement (rien
+ * n'est jamais servi périmé) ; en production la déduplication est
+ * indispensable car le store est mutable (Server Actions) et un cache global
+ * mentirait d'une requête à l'autre.
+ */
+const cache: <T extends (...args: never[]) => unknown>(fn: T) => T =
+  typeof cacheReact === 'function' ? cacheReact : (fn) => fn;
+
+/**
+ * Instantanés partagés des tableaux bruts.
+ *
+ * `getAllX()` recopie le tableau du store à CHAQUE appel : un seul rendu du
+ * tableau de bord déclenchait huit copies des 4 050 interventions et cinq des
+ * 31 777 maintenances. On en prend un instantané par requête — jamais trié ni
+ * modifié en place, seulement parcouru, les fonctions ci-dessous travaillant
+ * toujours sur des tableaux dérivés (`filter`/`map`).
+ */
+const instantaneAscenseurs = cache((): Ascenseur[] => getAllAscenseurs());
+const instantaneInterventions = cache((): Intervention[] => getAllInterventions());
+const instantaneMaintenances = cache((): Maintenance[] => getAllMaintenances());
+
+/** Compteurs de parc par statut d'appareil — KPI et taux de disponibilité. */
+interface AgregatsParc {
+  total: number;
+  enService: number;
+  enPanne: number;
+  aLArret: number;
+  modeDegrade: number;
+}
+
+/**
+ * Un seul parcours du parc pour tous les compteurs par statut : les cinq
+ * `filter()` indépendants (quatre dans les KPI, un dans le taux de
+ * disponibilité) relisaient chacun les 4 348 appareils.
+ */
+const agregatsParc = cache((): AgregatsParc => {
+  const agregats: AgregatsParc = { total: 0, enService: 0, enPanne: 0, aLArret: 0, modeDegrade: 0 };
+  for (const a of instantaneAscenseurs()) {
+    agregats.total++;
+    if (a.statutAppareil === StatutAppareil.EN_SERVICE) agregats.enService++;
+    else if (a.statutAppareil === StatutAppareil.EN_PANNE) agregats.enPanne++;
+    else if (a.statutAppareil === StatutAppareil.A_L_ARRET) agregats.aLArret++;
+    else if (a.statutAppareil === StatutAppareil.MODE_DEGRADE) agregats.modeDegrade++;
+  }
+  return agregats;
+});
+
+/** Métriques d'interventions indépendantes de l'instant courant. */
+interface AgregatsInterventions {
+  total: number;
+  ouvertes: number; // statut != CLOTURE
+  cloturees: number;
+  parMotif: Map<MotifIntervention, number>;
+  /** Interventions créées, par jour civil LOCAL (jamais UTC) — voir cleJourLocale. */
+  pannesParJour: Map<string, number>;
+}
+
+/**
+ * Un seul parcours des interventions pour les KPI d'ouverture, la répartition
+ * ouvertes/clôturées, la répartition par motif et les pannes par jour du
+ * Heatmap : quatre fonctions exportées qui relisaient chacune les 4 050
+ * lignes pour des compteurs parfaitement compatibles entre eux.
+ *
+ * Les jours à venir restent dans `pannesParJour` (l'agrégat ne dépend ainsi
+ * d'aucune notion de « aujourd'hui », donc reste juste toute la durée d'une
+ * requête) : `getActiviteParJour` ne lit ces compteurs que sur le passé et
+ * aujourd'hui, une panne ne se prévoyant pas.
+ */
+const agregatsInterventions = cache((): AgregatsInterventions => {
+  const parMotif = new Map<MotifIntervention, number>();
+  const pannesParJour = new Map<string, number>();
+  let total = 0;
+  let cloturees = 0;
+
+  for (const i of instantaneInterventions()) {
+    total++;
+    if (i.statut === StatutIntervention.CLOTURE) cloturees++;
+    parMotif.set(i.motif, (parMotif.get(i.motif) ?? 0) + 1);
+    const jour = cleJourLocale(new Date(i.dateCreation));
+    pannesParJour.set(jour, (pannesParJour.get(jour) ?? 0) + 1);
+  }
+
+  return { total, ouvertes: total - cloturees, cloturees, parMotif, pannesParJour };
+});
+
+/** Métriques de maintenances indépendantes de l'instant courant. */
+interface AgregatsMaintenances {
+  parStatut: Map<StatutMaintenance, number>;
+  /** Maintenances réalisées, par jour civil local de réalisation. */
+  reparationsParJour: Map<string, number>;
+  /** Maintenances encore à faire (ni réalisées ni annulées), par jour civil local prévu. */
+  planifieesParJour: Map<string, number>;
+  categoriesPlanifieesParJour: Map<string, Set<CategorieMaintenance>>;
+}
+
+/**
+ * Un seul parcours des maintenances pour la répartition par statut et pour le
+ * calendrier mixte du Heatmap — deux fonctions exportées qui relisaient
+ * chacune les 31 777 lignes.
+ *
+ * Comme pour les interventions, l'agrégat ignore où se situe « aujourd'hui » :
+ * `planifieesParJour` contient aussi les maintenances en retard (prévues dans
+ * le passé), que `getActiviteParJour` ne lit que sur les jours à venir — le
+ * passé n'affiche que du réalisé.
+ */
+const agregatsMaintenances = cache((): AgregatsMaintenances => {
+  const parStatut = new Map<StatutMaintenance, number>();
+  const reparationsParJour = new Map<string, number>();
+  const planifieesParJour = new Map<string, number>();
+  const categoriesPlanifieesParJour = new Map<string, Set<CategorieMaintenance>>();
+
+  for (const m of instantaneMaintenances()) {
+    parStatut.set(m.statut, (parStatut.get(m.statut) ?? 0) + 1);
+
+    if (m.statut === StatutMaintenance.REALISEE) {
+      if (!m.dateRealisee) continue;
+      const jour = cleJourLocale(new Date(m.dateRealisee));
+      reparationsParJour.set(jour, (reparationsParJour.get(jour) ?? 0) + 1);
+      continue;
+    }
+    if (m.statut === StatutMaintenance.ANNULEE) continue;
+
+    const jour = cleJourLocale(new Date(m.datePrevue));
+    planifieesParJour.set(jour, (planifieesParJour.get(jour) ?? 0) + 1);
+    const categories = categoriesPlanifieesParJour.get(jour) ?? new Set<CategorieMaintenance>();
+    for (const categorie of m.categories) categories.add(categorie);
+    categoriesPlanifieesParJour.set(jour, categories);
+  }
+
+  return { parStatut, reparationsParJour, planifieesParJour, categoriesPlanifieesParJour };
+});
+
+/**
+ * Interventions au SLA dépassé à un instant donné.
+ *
+ * Seule métrique globale qui dépend de l'heure : la clé de mémoïsation est
+ * donc l'instant lui-même (en millisecondes), pour ne jamais servir à un
+ * appelant le décompte d'un autre instant. Deux appelants qui tombent sur la
+ * même milliseconde (KPI « hors SLA » et taux de respect global) partagent le
+ * parcours ; sinon chacun refait le sien, exactement comme avant.
+ */
+const compteurInterventionsHorsSLA = cache((instantMs: number): number => {
+  const maintenant = new Date(instantMs);
+  let horsSLA = 0;
+  for (const i of instantaneInterventions()) {
+    if (estInterventionHorsSLA(i, maintenant)) horsSLA++;
+  }
+  return horsSLA;
+});
 
 // ============================================================================
 // 3.1 — KPI
@@ -84,29 +253,31 @@ export function getPrioriteAffichageMaintenance(
 }
 
 export function getKpisTableauDeBord(maintenant: Date = new Date()): KpisTableauDeBord {
-  const ascenseurs = getAllAscenseurs();
-  const interventions = getAllInterventions();
-  const maintenances = getAllMaintenances();
+  const parc = agregatsParc();
+  const interventions = agregatsInterventions();
 
+  // Seul passage propre à ce KPI : la priorité d'affichage dépend de
+  // `maintenant`, elle ne peut donc pas rejoindre l'agrégat partagé des
+  // maintenances (qui, lui, reste valable toute la durée de la requête).
   let enRetard = 0;
   let cetteSemaine = 0;
-  for (const m of maintenances) {
+  for (const m of instantaneMaintenances()) {
     const priorite = getPrioriteAffichageMaintenance(m, maintenant);
     if (priorite === PrioriteAffichageMaintenance.EN_RETARD) enRetard++;
     else if (priorite === PrioriteAffichageMaintenance.CETTE_SEMAINE) cetteSemaine++;
   }
 
   return {
-    totalAscenseurs: ascenseurs.length,
-    enService: ascenseurs.filter((a) => a.statutAppareil === StatutAppareil.EN_SERVICE).length,
-    enPanne: ascenseurs.filter((a) => a.statutAppareil === StatutAppareil.EN_PANNE).length,
-    aLArret: ascenseurs.filter((a) => a.statutAppareil === StatutAppareil.A_L_ARRET).length,
-    modeDegrade: ascenseurs.filter((a) => a.statutAppareil === StatutAppareil.MODE_DEGRADE).length,
-    interventionsOuvertes: interventions.filter((i) => i.statut !== StatutIntervention.CLOTURE).length,
-    interventionsHorsSLA: interventions.filter((i) => estInterventionHorsSLA(i, maintenant)).length,
+    totalAscenseurs: parc.total,
+    enService: parc.enService,
+    enPanne: parc.enPanne,
+    aLArret: parc.aLArret,
+    modeDegrade: parc.modeDegrade,
+    interventionsOuvertes: interventions.ouvertes,
+    interventionsHorsSLA: compteurInterventionsHorsSLA(maintenant.getTime()),
     maintenancesEnRetard: enRetard,
     maintenancesCetteSemaine: cetteSemaine,
-    ticketsNonAffectes: getAllTickets().filter((t) => t.statut === StatutTicket.NON_RAPPROCHE).length,
+    ticketsNonAffectes: getTicketsNonRapproches().length,
   };
 }
 
@@ -180,31 +351,13 @@ export function getActiviteParJour(_nbJoursIgnore?: number): JourActivite[] {
   aujourdhui.setHours(0, 0, 0, 0);
   const cleAujourdhui = cleJourLocale(aujourdhui);
 
-  const panneParJour = new Map<string, number>();
-  for (const i of getAllInterventions()) {
-    const key = cleJourLocale(new Date(i.dateCreation));
-    if (key > cleAujourdhui) continue; // garde-fou : rien ne se crée dans le futur
-    panneParJour.set(key, (panneParJour.get(key) ?? 0) + 1);
-  }
-
-  const reparationParJour = new Map<string, number>();
-  const planifieeParJour = new Map<string, number>();
-  const categoriesParJour = new Map<string, Set<CategorieMaintenance>>();
-  for (const m of getAllMaintenances()) {
-    if (m.statut === StatutMaintenance.REALISEE) {
-      if (!m.dateRealisee) continue;
-      const key = cleJourLocale(new Date(m.dateRealisee));
-      reparationParJour.set(key, (reparationParJour.get(key) ?? 0) + 1);
-      continue;
-    }
-    if (m.statut === StatutMaintenance.ANNULEE) continue;
-    const key = cleJourLocale(new Date(m.datePrevue));
-    if (key <= cleAujourdhui) continue; // le prévisionnel commence demain
-    planifieeParJour.set(key, (planifieeParJour.get(key) ?? 0) + 1);
-    const categories = categoriesParJour.get(key) ?? new Set<CategorieMaintenance>();
-    for (const categorie of m.categories) categories.add(categorie);
-    categoriesParJour.set(key, categories);
-  }
+  // Compteurs par jour issus des agrégats partagés (un seul parcours des
+  // interventions et des maintenances pour toute la page). Le tri
+  // passé/futur ne se fait plus à la construction des cartes mais à la
+  // lecture, ci-dessous : les pannes ne sont lues que jusqu'à aujourd'hui
+  // (rien ne se crée dans le futur) et le prévisionnel ne commence que demain.
+  const { pannesParJour } = agregatsInterventions();
+  const { reparationsParJour, planifieesParJour, categoriesPlanifieesParJour } = agregatsMaintenances();
 
   const debutPlage = decalerMois(aujourdhui, -MOIS_AFFICHES);
   const finPlage = decalerMois(aujourdhui, MOIS_AFFICHES);
@@ -237,20 +390,20 @@ export function getActiviteParJour(_nbJoursIgnore?: number): JourActivite[] {
         horsPlage: true,
       });
     } else if (temporalite === 'futur') {
-      const planifiees = planifieeParJour.get(date) ?? 0;
+      const planifiees = planifieesParJour.get(date) ?? 0;
       jours.push({
         date,
         count: planifiees,
         pannes: 0,
         reparations: 0,
         planifiees,
-        categoriesPlanifiees: [...(categoriesParJour.get(date) ?? [])],
+        categoriesPlanifiees: [...(categoriesPlanifieesParJour.get(date) ?? [])],
         temporalite,
         horsPlage: false,
       });
     } else {
-      const pannes = panneParJour.get(date) ?? 0;
-      const reparations = reparationParJour.get(date) ?? 0;
+      const pannes = pannesParJour.get(date) ?? 0;
+      const reparations = reparationsParJour.get(date) ?? 0;
       jours.push({
         date,
         count: pannes + reparations,
@@ -271,10 +424,9 @@ export function getActiviteParJour(_nbJoursIgnore?: number): JourActivite[] {
 
 /** Taux de disponibilité strict du parc (part des appareils EN_SERVICE), 0-100. */
 export function getTauxDisponibiliteParc(): number {
-  const ascenseurs = getAllAscenseurs();
-  if (ascenseurs.length === 0) return 100;
-  const enService = ascenseurs.filter((a) => a.statutAppareil === StatutAppareil.EN_SERVICE).length;
-  return Math.round((enService / ascenseurs.length) * 100);
+  const { total, enService } = agregatsParc();
+  if (total === 0) return 100;
+  return Math.round((enService / total) * 100);
 }
 
 export interface SegmentRepartition {
@@ -285,9 +437,7 @@ export interface SegmentRepartition {
 
 /** Répartition interventions ouvertes / clôturées (toutes périodes confondues). */
 export function getRepartitionInterventions(): SegmentRepartition[] {
-  const interventions = getAllInterventions();
-  const cloturees = interventions.filter((i) => i.statut === StatutIntervention.CLOTURE).length;
-  const ouvertes = interventions.length - cloturees;
+  const { ouvertes, cloturees } = agregatsInterventions();
   return [
     { value: ouvertes, color: '#6366f1', label: 'Ouvertes' },
     { value: cloturees, color: '#10b981', label: 'Clôturées' },
@@ -296,10 +446,7 @@ export function getRepartitionInterventions(): SegmentRepartition[] {
 
 /** Répartition des maintenances par statut — mêmes couleurs que StatutMaintenanceBadge. */
 export function getRepartitionMaintenances(): SegmentRepartition[] {
-  const compteurs = new Map<StatutMaintenance, number>();
-  for (const m of getAllMaintenances()) {
-    compteurs.set(m.statut, (compteurs.get(m.statut) ?? 0) + 1);
-  }
+  const compteurs = agregatsMaintenances().parStatut;
   return [
     { value: compteurs.get(StatutMaintenance.PLANIFIEE) ?? 0, color: '#0ea5e9', label: 'Planifiées' },
     { value: compteurs.get(StatutMaintenance.EN_COURS_DE_REALISATION) ?? 0, color: '#f59e0b', label: 'En cours' },
@@ -333,18 +480,26 @@ const LIBELLE_MOTIF: Record<MotifIntervention, string> = {
 
 /** Répartition des causes de panne par MotifIntervention — palette catégorielle fixe. */
 export function getRepartitionCausesPanne(): SegmentRepartition[] {
-  const compteurs = new Map<MotifIntervention, number>();
-  for (const i of getAllInterventions()) {
-    compteurs.set(i.motif, (compteurs.get(i.motif) ?? 0) + 1);
-  }
+  const compteurs = agregatsInterventions().parMotif;
   return (Object.values(MotifIntervention) as MotifIntervention[])
     .map((motif) => ({ value: compteurs.get(motif) ?? 0, color: COULEUR_MOTIF[motif], label: LIBELLE_MOTIF[motif] }))
     .filter((segment) => segment.value > 0);
 }
 
-/** Taux global de respect du SLA (0-100), toutes interventions confondues. */
+/**
+ * Taux global de respect du SLA (0-100), toutes interventions confondues.
+ *
+ * Même définition que `calculerTauxRespectSLA` (lib/derived/sla.ts) dont il
+ * reprend le calcul à l'identique : l'état SLA d'une intervention est unique,
+ * donc « respectées » = total − dépassées, et « dépassées » est exactement le
+ * prédicat `estInterventionHorsSLA`. On passe par le décompte partagé plutôt
+ * que par un `filter()` supplémentaire sur les 4 050 interventions.
+ */
 export function getTauxRespectSLAGlobal(): number {
-  return calculerTauxRespectSLA(getAllInterventions());
+  const { total } = agregatsInterventions();
+  if (total === 0) return 100;
+  const horsSLA = compteurInterventionsHorsSLA(Date.now());
+  return Math.round(((total - horsSLA) / total) * 100);
 }
 
 export interface ChargeTechnicien {
@@ -364,26 +519,30 @@ const STATUTS_INTERVENTION_ACTIFS: StatutIntervention[] = [
   StatutIntervention.A_REPRENDRE,
 ];
 
-/** Charge courante par technicien (interventions actives + maintenances à venir), triée décroissante. */
+/**
+ * Charge courante par technicien (interventions actives + maintenances à
+ * venir), triée décroissante.
+ *
+ * Lecture par technicien via les accès indexés du store
+ * (`getInterventionsByTechnicienId` / `getMaintenancesByTechnicienId`) plutôt
+ * qu'un regroupement maison : inutile de relire l'intégralité des 4 050
+ * interventions et des 31 777 maintenances — dont l'écrasante majorité est
+ * déjà réalisée ou clôturée — pour ne garder que les techniciens actifs.
+ */
 export function getChargeTechniciens(limit = 8): ChargeTechnicien[] {
-  const chargeInterventions = new Map<string, number>();
-  for (const i of getAllInterventions()) {
-    if (i.technicienId && STATUTS_INTERVENTION_ACTIFS.includes(i.statut)) {
-      chargeInterventions.set(i.technicienId, (chargeInterventions.get(i.technicienId) ?? 0) + 1);
-    }
-  }
-  const chargeMaintenances = new Map<string, number>();
-  for (const m of getAllMaintenances()) {
-    if (m.technicienId && (m.statut === StatutMaintenance.PLANIFIEE || m.statut === StatutMaintenance.EN_COURS_DE_REALISATION)) {
-      chargeMaintenances.set(m.technicienId, (chargeMaintenances.get(m.technicienId) ?? 0) + 1);
-    }
-  }
-
   return getAllTechniciens()
     .filter((t) => t.actif)
     .map((t) => {
-      const interventionsActives = chargeInterventions.get(t.id) ?? 0;
-      const maintenancesAVenir = chargeMaintenances.get(t.id) ?? 0;
+      let interventionsActives = 0;
+      for (const i of getInterventionsByTechnicienId(t.id)) {
+        if (STATUTS_INTERVENTION_ACTIFS.includes(i.statut)) interventionsActives++;
+      }
+      let maintenancesAVenir = 0;
+      for (const m of getMaintenancesByTechnicienId(t.id)) {
+        if (m.statut === StatutMaintenance.PLANIFIEE || m.statut === StatutMaintenance.EN_COURS_DE_REALISATION) {
+          maintenancesAVenir++;
+        }
+      }
       return { id: t.id, nom: t.nomComplet, specialite: t.specialite, interventionsActives, maintenancesAVenir, total: interventionsActives + maintenancesAVenir };
     })
     .filter((t) => t.total > 0)
@@ -403,7 +562,7 @@ export interface AscenseurAvecRisque {
 /** Score de risque de tous les appareils — calculé une fois, réutilisé par le top risque et les urgences. */
 export function getAscenseursAvecRisque(): AscenseurAvecRisque[] {
   const resultat: AscenseurAvecRisque[] = [];
-  for (const ascenseur of getAllAscenseurs()) {
+  for (const ascenseur of instantaneAscenseurs()) {
     const risk = getRiskScoreForAscenseur(ascenseur.id);
     if (risk) resultat.push({ ascenseur, risk });
   }
@@ -414,10 +573,16 @@ export interface AscenseurRisqueAffiche extends AscenseurAvecRisque {
   tendance7j: number[]; // nombre d'interventions créées par jour, 7 derniers jours
 }
 
-function tendance7jPourAscenseur(ascenseurId: string, interventions: Intervention[]): number[] {
+/**
+ * Interventions créées par jour sur les 7 derniers jours, pour un appareil.
+ *
+ * Lecture indexée `getInterventionsByAscenseurId` plutôt qu'un balayage des
+ * 4 050 interventions répété pour chacun des appareils du top risque. La clé
+ * de jour reste `cleJourLocale` : jour civil LOCAL, jamais UTC.
+ */
+function tendance7jPourAscenseur(ascenseurId: string): number[] {
   const parJour = new Map<string, number>();
-  for (const i of interventions) {
-    if (i.ascenseurId !== ascenseurId) continue;
+  for (const i of getInterventionsByAscenseurId(ascenseurId)) {
     const key = cleJourLocale(new Date(i.dateCreation));
     parJour.set(key, (parJour.get(key) ?? 0) + 1);
   }
@@ -434,11 +599,10 @@ function tendance7jPourAscenseur(ascenseurId: string, interventions: Interventio
 
 /** Top N ascenseurs par score de risque décroissant. */
 export function getTopAscenseursRisque(ascenseursAvecRisque: AscenseurAvecRisque[], limit = 5): AscenseurRisqueAffiche[] {
-  const interventions = getAllInterventions();
   return [...ascenseursAvecRisque]
     .sort((a, b) => b.risk.score - a.risk.score)
     .slice(0, limit)
-    .map((item) => ({ ...item, tendance7j: tendance7jPourAscenseur(item.ascenseur.id, interventions) }));
+    .map((item) => ({ ...item, tendance7j: tendance7jPourAscenseur(item.ascenseur.id) }));
 }
 
 // ============================================================================
@@ -474,38 +638,45 @@ const SEUIL_NON_PRIS_EN_CHARGE_MINUTES = 120;
 
 /** Bloc "Urgences" (section 3.3) — court et priorisé, groupé par nature d'urgence. */
 export function getUrgences(ascenseursAvecRisque: AscenseurAvecRisque[], maintenant: Date = new Date()): GroupeUrgence[] {
-  const interventions = getAllInterventions();
-  const dejaSignalees = new Set<string>();
+  const maintenantMs = maintenant.getTime();
 
   // Les statuts TERMINE/A_VALIDER signifient que le technicien a déjà réglé la situation sur
   // site : la personne n'est plus bloquée, il ne reste qu'une validation administrative à
   // faire. On les garde dans le total (statut non clôturé, comme demandé) mais on priorise
   // dans l'aperçu les cas encore réellement actifs sur le terrain.
   const STATUTS_RESOLUS_SUR_SITE: StatutIntervention[] = [StatutIntervention.TERMINE, StatutIntervention.A_VALIDER];
-  const personneBloquee = interventions
-    .filter((i) => i.motif === MotifIntervention.PERSONNE_BLOQUEE && i.statut !== StatutIntervention.CLOTURE)
-    .sort((a, b) => {
-      const aResolu = STATUTS_RESOLUS_SUR_SITE.includes(a.statut);
-      const bResolu = STATUTS_RESOLUS_SUR_SITE.includes(b.statut);
-      if (aResolu !== bResolu) return aResolu ? 1 : -1;
-      return new Date(a.dateLimiteSLA).getTime() - new Date(b.dateLimiteSLA).getTime();
-    });
-  personneBloquee.forEach((i) => dejaSignalees.add(i.id));
 
-  const nonPrisEnCharge = interventions
-    .filter(
-      (i) =>
-        !dejaSignalees.has(i.id) &&
-        i.statut === StatutIntervention.A_AFFECTER &&
-        (maintenant.getTime() - new Date(i.dateCreation).getTime()) / 60000 >= SEUIL_NON_PRIS_EN_CHARGE_MINUTES
-    )
-    .sort((a, b) => new Date(a.dateCreation).getTime() - new Date(b.dateCreation).getTime());
-  nonPrisEnCharge.forEach((i) => dejaSignalees.add(i.id));
+  // Un seul passage sur les interventions pour les trois groupes, au lieu de
+  // trois `filter()` successifs. Le `else if` remplace exactement l'ancien
+  // ensemble `dejaSignalees` : une intervention retenue par un groupe n'était
+  // déjà plus proposée aux suivants, et les groupes sont examinés dans le même
+  // ordre de priorité qu'avant. L'ordre relatif des éléments est celui du
+  // tableau source, donc les tris qui suivent (stables) donnent le même
+  // résultat qu'auparavant.
+  const personneBloquee: Intervention[] = [];
+  const nonPrisEnCharge: Intervention[] = [];
+  const slaBientotDepasse: Intervention[] = [];
+  for (const i of instantaneInterventions()) {
+    if (i.motif === MotifIntervention.PERSONNE_BLOQUEE && i.statut !== StatutIntervention.CLOTURE) {
+      personneBloquee.push(i);
+    } else if (
+      i.statut === StatutIntervention.A_AFFECTER &&
+      (maintenantMs - new Date(i.dateCreation).getTime()) / 60000 >= SEUIL_NON_PRIS_EN_CHARGE_MINUTES
+    ) {
+      nonPrisEnCharge.push(i);
+    } else if (i.statut !== StatutIntervention.CLOTURE && calculerEtatSLA(i, maintenant).etat === EtatSLA.BIENTOT_DEPASSE) {
+      slaBientotDepasse.push(i);
+    }
+  }
 
-  const slaBientotDepasse = interventions
-    .filter((i) => !dejaSignalees.has(i.id) && i.statut !== StatutIntervention.CLOTURE && calculerEtatSLA(i, maintenant).etat === EtatSLA.BIENTOT_DEPASSE)
-    .sort((a, b) => new Date(a.dateLimiteSLA).getTime() - new Date(b.dateLimiteSLA).getTime());
-  slaBientotDepasse.forEach((i) => dejaSignalees.add(i.id));
+  personneBloquee.sort((a, b) => {
+    const aResolu = STATUTS_RESOLUS_SUR_SITE.includes(a.statut);
+    const bResolu = STATUTS_RESOLUS_SUR_SITE.includes(b.statut);
+    if (aResolu !== bResolu) return aResolu ? 1 : -1;
+    return new Date(a.dateLimiteSLA).getTime() - new Date(b.dateLimiteSLA).getTime();
+  });
+  nonPrisEnCharge.sort((a, b) => new Date(a.dateCreation).getTime() - new Date(b.dateCreation).getTime());
+  slaBientotDepasse.sort((a, b) => new Date(a.dateLimiteSLA).getTime() - new Date(b.dateLimiteSLA).getTime());
 
   const appareilsArret = ascenseursAvecRisque
     .filter((a) => a.ascenseur.statutAppareil === StatutAppareil.EN_PANNE || a.ascenseur.statutAppareil === StatutAppareil.A_L_ARRET)
@@ -640,13 +811,31 @@ function limiterParSource(items: ActiviteRecenteItem[], limit: number, maxParSou
 }
 
 /** Flux fusionné des dernières activités (interventions, maintenances, réserves CTQ, intégrations). */
+/**
+ * Les dernières activités d'une source, les plus récentes d'abord.
+ *
+ * L'horodatage est converti UNE fois par élément puis trié sur le nombre
+ * obtenu : passer `new Date(...)` dans le comparateur le refaisait deux fois
+ * par comparaison, soit ~950 000 analyses de chaînes ISO pour les seules
+ * 31 777 maintenances. Le tri par clé numérique décroissante est stable et
+ * classe donc exactement comme avant, ex æquo compris.
+ */
+function plusRecents<T>(elements: T[], horodatage: (element: T) => string, combien: number): T[] {
+  return elements
+    .map((element) => ({ element, instant: new Date(horodatage(element)).getTime() }))
+    .sort((a, b) => b.instant - a.instant)
+    .slice(0, combien)
+    .map(({ element }) => element);
+}
+
 export function getActiviteRecente(limit = 15): ActiviteRecenteItem[] {
   const candidatsParSource = Math.max(limit, 20);
 
-  const interventionsItems: ActiviteRecenteItem[] = getAllInterventions()
-    .map((i) => ({ intervention: i, etape: derniereEtapeIntervention(i) }))
-    .sort((a, b) => new Date(b.etape.dateHeure).getTime() - new Date(a.etape.dateHeure).getTime())
-    .slice(0, candidatsParSource)
+  const interventionsItems: ActiviteRecenteItem[] = plusRecents(
+    instantaneInterventions().map((i) => ({ intervention: i, etape: derniereEtapeIntervention(i) })),
+    ({ etape }) => etape.dateHeure,
+    candidatsParSource
+  )
     .map(({ intervention, etape }) => ({
       id: `int-etape-${intervention.id}`,
       dateHeure: etape.dateHeure,
@@ -657,10 +846,13 @@ export function getActiviteRecente(limit = 15): ActiviteRecenteItem[] {
       statut: intervention.statut,
     }));
 
-  const maintenancesItems: ActiviteRecenteItem[] = getAllMaintenances()
-    .filter((m): m is Maintenance & { dateRealisee: string } => m.statut === StatutMaintenance.REALISEE && !!m.dateRealisee)
-    .sort((a, b) => new Date(b.dateRealisee).getTime() - new Date(a.dateRealisee).getTime())
-    .slice(0, candidatsParSource)
+  const maintenancesItems: ActiviteRecenteItem[] = plusRecents(
+    instantaneMaintenances().filter(
+      (m): m is Maintenance & { dateRealisee: string } => m.statut === StatutMaintenance.REALISEE && !!m.dateRealisee
+    ),
+    (m) => m.dateRealisee,
+    candidatsParSource
+  )
     .map((m) => ({
       id: `mnt-${m.id}`,
       dateHeure: m.dateRealisee,
@@ -670,10 +862,11 @@ export function getActiviteRecente(limit = 15): ActiviteRecenteItem[] {
       categories: m.categories,
     }));
 
-  const reservesItems: ActiviteRecenteItem[] = getAllEvenementsReserve()
-    .filter((e) => e.typeEvenement === TypeEvenementReserve.RESERVE_VALIDEE)
-    .sort((a, b) => new Date(b.dateHeure).getTime() - new Date(a.dateHeure).getTime())
-    .slice(0, candidatsParSource)
+  const reservesItems: ActiviteRecenteItem[] = plusRecents(
+    getAllEvenementsReserve().filter((e) => e.typeEvenement === TypeEvenementReserve.RESERVE_VALIDEE),
+    (e) => e.dateHeure,
+    candidatsParSource
+  )
     .map((e) => {
       const reserve = getReserveCTQById(e.reserveId);
       return {
@@ -686,9 +879,11 @@ export function getActiviteRecente(limit = 15): ActiviteRecenteItem[] {
       };
     });
 
-  const integrationItems: ActiviteRecenteItem[] = getAllJournalEchangesIntegration()
-    .sort((a, b) => new Date(b.dateHeure).getTime() - new Date(a.dateHeure).getTime())
-    .slice(0, candidatsParSource)
+  const integrationItems: ActiviteRecenteItem[] = plusRecents(
+    getAllJournalEchangesIntegration(),
+    (j) => j.dateHeure,
+    candidatsParSource
+  )
     .map((j) => ({
       id: `jecx-${j.id}`,
       dateHeure: j.dateHeure,

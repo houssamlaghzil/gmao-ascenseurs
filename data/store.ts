@@ -130,6 +130,7 @@ import {
   type HistoriqueMaintenanceAgregat,
   type CompteurRapportsAppareil,
 } from './mockData';
+import { construireIndexes, type Indexes } from './indexes';
 
 export type { HistoriqueMaintenanceAgregat, CompteurRapportsAppareil };
 
@@ -185,6 +186,66 @@ const reglesMetier: RegleMetier[] = [...initialReglesMetier];
 const configurationsNotification: ConfigurationNotification[] = [...initialConfigurationsNotification];
 
 // ============================================================================
+// CACHE D'INDEX — reconstruit paresseusement, invalidé à chaque mutation
+// ============================================================================
+//
+// Les tableaux ci-dessus restent la source de vérité mutable. `obtenirIndexes()`
+// construit (une seule fois, en O(n), et uniquement à la demande) l'ensemble
+// des Map de recherche définies par data/indexes.ts, et les met en cache tant
+// qu'aucun mutateur n'a incrémenté `versionIndexes`. Voir data/indexes.ts pour
+// le contrat complet (structure des Map, cas particuliers n-n et clé composite).
+
+let indexesConstruits: Indexes | null = null;
+let versionIndexes = 0;
+let versionIndexesConstruits = -1;
+
+function invaliderIndexes(): void {
+  versionIndexes++;
+}
+
+function obtenirIndexes(): Indexes {
+  if (indexesConstruits === null || versionIndexesConstruits !== versionIndexes) {
+    indexesConstruits = construireIndexes({
+      secteursGeographiques,
+      techniciens,
+      tournees,
+      clients,
+      contrats,
+      parcs,
+      ascenseurs,
+      entreesJournalModification,
+      interventions,
+      tickets,
+      reaffectations,
+      rapports,
+      photosRapport,
+      maintenances,
+      typesMaintenanceRef,
+      absencesTechnicien,
+      bureauxEtudes,
+      controlesCTQ,
+      reservesCTQ,
+      evenementsReserve,
+      utilisateurs,
+      integrationsExternes,
+      journalEchangesIntegration,
+      sessionsTechnicien,
+      elementsFileSynchronisation,
+      appareilsTelechargesLocalement,
+      etatsPTITechnicien,
+      positionsTechnicien,
+      zonesGeographiques,
+      tourneesDuJour,
+      tachesAsynchrones,
+      notifications,
+      entreesAudit,
+    });
+    versionIndexesConstruits = versionIndexes;
+  }
+  return indexesConstruits;
+}
+
+// ============================================================================
 // 1. APPAREILS & PARC
 // ============================================================================
 
@@ -192,31 +253,32 @@ export function getAllSecteursGeographiques(): SecteurGeographique[] {
   return [...secteursGeographiques];
 }
 export function getSecteurGeographiqueById(id: string): SecteurGeographique | undefined {
-  return secteursGeographiques.find((s) => s.id === id);
+  return obtenirIndexes().secteursGeographiques.byId.get(id);
 }
 
 export function getAllTechniciens(): Technicien[] {
   return [...techniciens];
 }
 export function getTechnicienById(id: string): Technicien | undefined {
-  return techniciens.find((t) => t.id === id);
+  return obtenirIndexes().techniciens.byId.get(id);
 }
 export function updateTechnicien(technicien: Technicien): void {
   const index = techniciens.findIndex((t) => t.id === technicien.id);
   if (index !== -1) techniciens[index] = technicien;
+  invaliderIndexes();
 }
 
 export function getAllTournees(): Tournee[] {
   return [...tournees];
 }
 export function getTourneeById(id: string): Tournee | undefined {
-  return tournees.find((t) => t.id === id);
+  return obtenirIndexes().tournees.byId.get(id);
 }
 export function getTourneesByTechnicienId(technicienId: string): Tournee[] {
-  return tournees.filter((t) => t.technicienTitulaireId === technicienId);
+  return [...(obtenirIndexes().tournees.byTechnicienId.get(technicienId) ?? [])];
 }
 export function getTourneesBySecteurId(secteurId: string): Tournee[] {
-  return tournees.filter((t) => t.secteurId === secteurId);
+  return [...(obtenirIndexes().tournees.bySecteurId.get(secteurId) ?? [])];
 }
 
 export function getAllDefinitionsSLA(): DefinitionSLA[] {
@@ -230,47 +292,51 @@ export function getAllAscenseurs(): Ascenseur[] {
   return [...ascenseurs];
 }
 export function getAscenseurById(id: string): Ascenseur | undefined {
-  return ascenseurs.find((a) => a.id === id);
+  return obtenirIndexes().ascenseurs.byId.get(id);
 }
 export function getAscenseurByCode(code: string): Ascenseur | undefined {
-  return ascenseurs.find((a) => a.code === code);
+  return obtenirIndexes().ascenseurs.byCode.get(code);
 }
 export function getAscenseursByParcId(parcId: string): Ascenseur[] {
-  return ascenseurs.filter((a) => a.parcId === parcId);
+  return [...(obtenirIndexes().ascenseurs.byParcId.get(parcId) ?? [])];
 }
 export function getAscenseursByClientId(clientId: string): Ascenseur[] {
-  return ascenseurs.filter((a) => a.clientId === clientId);
+  return [...(obtenirIndexes().ascenseurs.byClientId.get(clientId) ?? [])];
 }
 export function getAscenseursByContratId(contratId: string): Ascenseur[] {
-  return ascenseurs.filter((a) => a.contratId === contratId);
+  return [...(obtenirIndexes().ascenseurs.byContratId.get(contratId) ?? [])];
 }
 export function getAscenseursByTechnicienId(technicienId: string): Ascenseur[] {
-  return ascenseurs.filter((a) => a.technicienAffecteId === technicienId);
+  return [...(obtenirIndexes().ascenseurs.byTechnicienId.get(technicienId) ?? [])];
 }
 export function getAscenseursByTourneeId(tourneeId: string): Ascenseur[] {
-  return ascenseurs.filter((a) => a.tourneeId === tourneeId);
+  return [...(obtenirIndexes().ascenseurs.byTourneeId.get(tourneeId) ?? [])];
 }
 export function addAscenseur(ascenseur: Ascenseur): void {
   ascenseurs.push(ascenseur);
+  invaliderIndexes();
 }
 export function updateAscenseur(ascenseur: Ascenseur): void {
   const index = ascenseurs.findIndex((a) => a.id === ascenseur.id);
   if (index !== -1) ascenseurs[index] = ascenseur;
+  invaliderIndexes();
 }
 export function deleteAscenseur(id: string): void {
   ascenseurs = ascenseurs.filter((a) => a.id !== id);
+  invaliderIndexes();
 }
 
 export function getAllEntreesJournalModification(): EntreeJournalModification[] {
   return [...entreesJournalModification].sort((a, b) => new Date(b.dateModification).getTime() - new Date(a.dateModification).getTime());
 }
 export function getEntreesJournalModificationByAscenseurId(ascenseurId: string): EntreeJournalModification[] {
-  return entreesJournalModification
-    .filter((e) => e.ascenseurId === ascenseurId)
-    .sort((a, b) => new Date(b.dateModification).getTime() - new Date(a.dateModification).getTime());
+  return [...(obtenirIndexes().entreesJournalModification.byAscenseurId.get(ascenseurId) ?? [])].sort(
+    (a, b) => new Date(b.dateModification).getTime() - new Date(a.dateModification).getTime()
+  );
 }
 export function addEntreeJournalModification(entree: EntreeJournalModification): void {
   entreesJournalModification.push(entree);
+  invaliderIndexes();
 }
 
 // ============================================================================
@@ -281,14 +347,16 @@ export function getAllClients(): Client[] {
   return [...clients];
 }
 export function getClientById(id: string): Client | undefined {
-  return clients.find((c) => c.id === id);
+  return obtenirIndexes().clients.byId.get(id);
 }
 export function addClient(client: Client): void {
   clients.push(client);
+  invaliderIndexes();
 }
 export function updateClient(client: Client): void {
   const index = clients.findIndex((c) => c.id === client.id);
   if (index !== -1) clients[index] = client;
+  invaliderIndexes();
 }
 export function getResponsablesByClientId(clientId: string): ResponsableClient[] {
   return getClientById(clientId)?.responsables ?? [];
@@ -301,44 +369,49 @@ export function getAllContrats(): Contrat[] {
   return [...contrats];
 }
 export function getContratById(id: string): Contrat | undefined {
-  return contrats.find((c) => c.id === id);
+  return obtenirIndexes().contrats.byId.get(id);
 }
 export function getContratsByClientId(clientId: string): Contrat[] {
-  return contrats.filter((c) => c.clientId === clientId);
+  return [...(obtenirIndexes().contrats.byClientId.get(clientId) ?? [])];
 }
 export function getContratsByParcId(parcId: string): Contrat[] {
-  return contrats.filter((c) => c.parcIds.includes(parcId));
+  return [...(obtenirIndexes().contrats.byParcId.get(parcId) ?? [])];
 }
 export function addContrat(contrat: Contrat): void {
   contrats.push(contrat);
+  invaliderIndexes();
 }
 export function updateContrat(contrat: Contrat): void {
   const index = contrats.findIndex((c) => c.id === contrat.id);
   if (index !== -1) contrats[index] = contrat;
+  invaliderIndexes();
 }
 
 export function getAllParcs(): ParcAscenseurs[] {
   return [...parcs];
 }
 export function getParcById(id: string): ParcAscenseurs | undefined {
-  return parcs.find((p) => p.id === id);
+  return obtenirIndexes().parcs.byId.get(id);
 }
 export function getParcsByClientId(clientId: string): ParcAscenseurs[] {
-  return parcs.filter((p) => p.clientId === clientId);
+  return [...(obtenirIndexes().parcs.byClientId.get(clientId) ?? [])];
 }
 export function getParcsBySecteurId(secteurId: string): ParcAscenseurs[] {
-  return parcs.filter((p) => p.secteurId === secteurId);
+  return [...(obtenirIndexes().parcs.bySecteurId.get(secteurId) ?? [])];
 }
 export function addParc(parc: ParcAscenseurs): void {
   parcs.push(parc);
+  invaliderIndexes();
 }
 export function updateParc(parc: ParcAscenseurs): void {
   const index = parcs.findIndex((p) => p.id === parc.id);
   if (index !== -1) parcs[index] = parc;
+  invaliderIndexes();
 }
 export function deleteParc(id: string): void {
   parcs = parcs.filter((p) => p.id !== id);
   ascenseurs = ascenseurs.filter((a) => a.parcId !== id);
+  invaliderIndexes();
 }
 
 // ============================================================================
@@ -349,66 +422,72 @@ export function getAllInterventions(): Intervention[] {
   return [...interventions];
 }
 export function getInterventionById(id: string): Intervention | undefined {
-  return interventions.find((i) => i.id === id);
+  return obtenirIndexes().interventions.byId.get(id);
 }
 export function getInterventionByNumero(numero: string): Intervention | undefined {
-  return interventions.find((i) => i.numero === numero);
+  return obtenirIndexes().interventions.byNumero.get(numero);
 }
 export function getInterventionsByAscenseurId(ascenseurId: string): Intervention[] {
-  return interventions.filter((i) => i.ascenseurId === ascenseurId);
+  return [...(obtenirIndexes().interventions.byAscenseurId.get(ascenseurId) ?? [])];
 }
 export function getInterventionsByTechnicienId(technicienId: string): Intervention[] {
-  return interventions.filter((i) => i.technicienId === technicienId);
+  return [...(obtenirIndexes().interventions.byTechnicienId.get(technicienId) ?? [])];
 }
 export function getInterventionsByContratId(contratId: string): Intervention[] {
-  return interventions.filter((i) => i.contratId === contratId);
+  return [...(obtenirIndexes().interventions.byContratId.get(contratId) ?? [])];
 }
 export function getInterventionsByStatut(statut: StatutIntervention): Intervention[] {
-  return interventions.filter((i) => i.statut === statut);
+  return [...(obtenirIndexes().interventions.byStatut.get(statut) ?? [])];
 }
 export function addIntervention(intervention: Intervention): void {
   interventions.push(intervention);
+  invaliderIndexes();
 }
 export function updateIntervention(intervention: Intervention): void {
   const index = interventions.findIndex((i) => i.id === intervention.id);
   if (index !== -1) interventions[index] = intervention;
+  invaliderIndexes();
 }
 
 export function getAllTickets(): Ticket[] {
   return [...tickets];
 }
 export function getTicketById(id: string): Ticket | undefined {
-  return tickets.find((t) => t.id === id);
+  return obtenirIndexes().tickets.byId.get(id);
 }
 export function getTicketsByInterventionId(interventionId: string): Ticket[] {
-  return tickets
-    .filter((t) => t.interventionId === interventionId)
-    .sort((a, b) => (a.ordreDansIntervention ?? 0) - (b.ordreDansIntervention ?? 0));
+  return [...(obtenirIndexes().tickets.byInterventionId.get(interventionId) ?? [])].sort(
+    (a, b) => (a.ordreDansIntervention ?? 0) - (b.ordreDansIntervention ?? 0)
+  );
 }
 export function getTicketsByAscenseurId(ascenseurId: string): Ticket[] {
-  return tickets.filter((t) => t.ascenseurId === ascenseurId);
+  return [...(obtenirIndexes().tickets.byAscenseurId.get(ascenseurId) ?? [])];
 }
 export function getTicketsNonRapproches(): Ticket[] {
-  return tickets.filter((t) => t.statut === StatutTicket.NON_RAPPROCHE);
+  return [...(obtenirIndexes().tickets.byStatut.get(StatutTicket.NON_RAPPROCHE) ?? [])];
 }
 export function addTicket(ticket: Ticket): void {
   tickets.push(ticket);
+  invaliderIndexes();
 }
 export function updateTicket(ticket: Ticket): void {
   const index = tickets.findIndex((t) => t.id === ticket.id);
   if (index !== -1) tickets[index] = ticket;
+  invaliderIndexes();
 }
 
 export function getAllReaffectations(): Reaffectation[] {
   return [...reaffectations];
 }
 export function getReaffectationsByCible(cibleType: TypeCiblePlanning, cibleId: string): Reaffectation[] {
-  return reaffectations
-    .filter((r) => r.cibleType === cibleType && r.cibleId === cibleId)
-    .sort((a, b) => new Date(a.dateHeure).getTime() - new Date(b.dateHeure).getTime());
+  const cle = `${cibleType}:${cibleId}`;
+  return [...(obtenirIndexes().reaffectations.byCible.get(cle) ?? [])].sort(
+    (a, b) => new Date(a.dateHeure).getTime() - new Date(b.dateHeure).getTime()
+  );
 }
 export function addReaffectation(reaffectation: Reaffectation): void {
   reaffectations.push(reaffectation);
+  invaliderIndexes();
 }
 
 /**
@@ -503,28 +582,30 @@ export function getAllRapports(): Rapport[] {
   return [...rapports];
 }
 export function getRapportById(id: string): Rapport | undefined {
-  return rapports.find((r) => r.id === id);
+  return obtenirIndexes().rapports.byId.get(id);
 }
 export function getRapportsByInterventionId(interventionId: string): Rapport[] {
-  return rapports
-    .filter((r) => r.interventionId === interventionId)
-    .sort((a, b) => (a.numeroPassageIntervention ?? 0) - (b.numeroPassageIntervention ?? 0));
+  return [...(obtenirIndexes().rapports.byInterventionId.get(interventionId) ?? [])].sort(
+    (a, b) => (a.numeroPassageIntervention ?? 0) - (b.numeroPassageIntervention ?? 0)
+  );
 }
 export function getRapportsByMaintenanceId(maintenanceId: string): Rapport[] {
-  return rapports.filter((r) => r.maintenanceId === maintenanceId);
+  return [...(obtenirIndexes().rapports.byMaintenanceId.get(maintenanceId) ?? [])];
 }
 export function getRapportsByAscenseurId(ascenseurId: string): Rapport[] {
-  return rapports.filter((r) => r.ascenseurId === ascenseurId);
+  return [...(obtenirIndexes().rapports.byAscenseurId.get(ascenseurId) ?? [])];
 }
 export function getRapportsByTechnicienId(technicienId: string): Rapport[] {
-  return rapports.filter((r) => r.technicienId === technicienId);
+  return [...(obtenirIndexes().rapports.byTechnicienId.get(technicienId) ?? [])];
 }
 export function addRapport(rapport: Rapport): void {
   rapports.push(rapport);
+  invaliderIndexes();
 }
 export function updateRapport(rapport: Rapport): void {
   const index = rapports.findIndex((r) => r.id === rapport.id);
   if (index !== -1) rapports[index] = rapport;
+  invaliderIndexes();
 }
 
 /** Rapport synthétique paresseux pour la pagination au-delà de l'échantillon curé (mis en cache). */
@@ -536,16 +617,17 @@ export function getAllPhotosRapport(): PhotoRapport[] {
   return [...photosRapport];
 }
 export function getPhotoRapportById(id: string): PhotoRapport | undefined {
-  return photosRapport.find((p) => p.id === id);
+  return obtenirIndexes().photosRapport.byId.get(id);
 }
 export function getPhotosByRapportId(rapportId: string): PhotoRapport[] {
-  return photosRapport.filter((p) => p.rapportId === rapportId);
+  return [...(obtenirIndexes().photosRapport.byRapportId.get(rapportId) ?? [])];
 }
 export function getPhotosByReserveId(reserveCtqId: string): PhotoRapport[] {
-  return photosRapport.filter((p) => p.reserveCtqId === reserveCtqId);
+  return [...(obtenirIndexes().photosRapport.byReserveId.get(reserveCtqId) ?? [])];
 }
 export function addPhotoRapport(photo: PhotoRapport): void {
   photosRapport.push(photo);
+  invaliderIndexes();
 }
 
 /** Agrégat global des rapports (constante de configuration, indépendante de rapports.length). */
@@ -582,26 +664,28 @@ export function getAllMaintenances(): Maintenance[] {
   return [...maintenances];
 }
 export function getMaintenanceById(id: string): Maintenance | undefined {
-  return maintenances.find((m) => m.id === id);
+  return obtenirIndexes().maintenances.byId.get(id);
 }
 export function getMaintenancesByAscenseurId(ascenseurId: string): Maintenance[] {
-  return maintenances.filter((m) => m.ascenseurId === ascenseurId);
+  return [...(obtenirIndexes().maintenances.byAscenseurId.get(ascenseurId) ?? [])];
 }
 export function getMaintenancesByTechnicienId(technicienId: string): Maintenance[] {
-  return maintenances.filter((m) => m.technicienId === technicienId);
+  return [...(obtenirIndexes().maintenances.byTechnicienId.get(technicienId) ?? [])];
 }
 export function getMaintenancesByTourneeId(tourneeId: string): Maintenance[] {
-  return maintenances.filter((m) => m.tourneeId === tourneeId);
+  return [...(obtenirIndexes().maintenances.byTourneeId.get(tourneeId) ?? [])];
 }
 export function getMaintenancesByContratId(contratId: string): Maintenance[] {
-  return maintenances.filter((m) => m.contratId === contratId);
+  return [...(obtenirIndexes().maintenances.byContratId.get(contratId) ?? [])];
 }
 export function addMaintenance(maintenance: Maintenance): void {
   maintenances.push(maintenance);
+  invaliderIndexes();
 }
 export function updateMaintenance(maintenance: Maintenance): void {
   const index = maintenances.findIndex((m) => m.id === maintenance.id);
   if (index !== -1) maintenances[index] = maintenance;
+  invaliderIndexes();
 }
 
 /** Compteurs agrégés (années précédentes) — jamais d'objets Maintenance historisés individuellement. */
@@ -616,7 +700,7 @@ export function getAllTypesMaintenanceRef(): TypeMaintenanceRef[] {
   return [...typesMaintenanceRef];
 }
 export function getTypeMaintenanceRefById(id: string): TypeMaintenanceRef | undefined {
-  return typesMaintenanceRef.find((t) => t.id === id);
+  return obtenirIndexes().typesMaintenanceRef.byId.get(id);
 }
 export function getAllCausesPanneRef(): CausePanneRef[] {
   return [...causesPanneRef];
@@ -626,10 +710,11 @@ export function getAllAbsencesTechnicien(): AbsenceTechnicien[] {
   return [...absencesTechnicien];
 }
 export function getAbsencesByTechnicienId(technicienId: string): AbsenceTechnicien[] {
-  return absencesTechnicien.filter((a) => a.technicienId === technicienId);
+  return [...(obtenirIndexes().absencesTechnicien.byTechnicienId.get(technicienId) ?? [])];
 }
 export function addAbsenceTechnicien(absence: AbsenceTechnicien): void {
   absencesTechnicien.push(absence);
+  invaliderIndexes();
 }
 
 // ============================================================================
@@ -640,62 +725,67 @@ export function getAllBureauxEtudes(): BureauEtudes[] {
   return [...bureauxEtudes];
 }
 export function getBureauEtudesById(id: string): BureauEtudes | undefined {
-  return bureauxEtudes.find((b) => b.id === id);
+  return obtenirIndexes().bureauxEtudes.byId.get(id);
 }
 
 export function getAllControlesCTQ(): ControleCTQ[] {
   return [...controlesCTQ];
 }
 export function getControleCTQById(id: string): ControleCTQ | undefined {
-  return controlesCTQ.find((c) => c.id === id);
+  return obtenirIndexes().controlesCTQ.byId.get(id);
 }
 export function getControlesCTQByAppareilId(appareilId: string): ControleCTQ[] {
-  return controlesCTQ.filter((c) => c.appareilId === appareilId);
+  return [...(obtenirIndexes().controlesCTQ.byAppareilId.get(appareilId) ?? [])];
 }
 export function getControlesCTQByClientId(clientId: string): ControleCTQ[] {
-  return controlesCTQ.filter((c) => c.clientId === clientId);
+  return [...(obtenirIndexes().controlesCTQ.byClientId.get(clientId) ?? [])];
 }
 export function addControleCTQ(controle: ControleCTQ): void {
   controlesCTQ.push(controle);
+  invaliderIndexes();
 }
 export function updateControleCTQ(controle: ControleCTQ): void {
   const index = controlesCTQ.findIndex((c) => c.id === controle.id);
   if (index !== -1) controlesCTQ[index] = controle;
+  invaliderIndexes();
 }
 
 export function getAllReservesCTQ(): ReserveCTQ[] {
   return [...reservesCTQ];
 }
 export function getReserveCTQById(id: string): ReserveCTQ | undefined {
-  return reservesCTQ.find((r) => r.id === id);
+  return obtenirIndexes().reservesCTQ.byId.get(id);
 }
 export function getReservesCTQByControleId(controleId: string): ReserveCTQ[] {
-  return reservesCTQ.filter((r) => r.controleId === controleId);
+  return [...(obtenirIndexes().reservesCTQ.byControleId.get(controleId) ?? [])];
 }
 export function getReservesCTQByAppareilId(appareilId: string): ReserveCTQ[] {
-  return reservesCTQ.filter((r) => r.appareilId === appareilId);
+  return [...(obtenirIndexes().reservesCTQ.byAppareilId.get(appareilId) ?? [])];
 }
 export function getReservesCTQByTechnicienId(technicienId: string): ReserveCTQ[] {
-  return reservesCTQ.filter((r) => r.technicienAssigneId === technicienId);
+  return [...(obtenirIndexes().reservesCTQ.byTechnicienId.get(technicienId) ?? [])];
 }
 export function addReserveCTQ(reserve: ReserveCTQ): void {
   reservesCTQ.push(reserve);
+  invaliderIndexes();
 }
 export function updateReserveCTQ(reserve: ReserveCTQ): void {
   const index = reservesCTQ.findIndex((r) => r.id === reserve.id);
   if (index !== -1) reservesCTQ[index] = reserve;
+  invaliderIndexes();
 }
 
 export function getAllEvenementsReserve(): EvenementReserve[] {
   return [...evenementsReserve];
 }
 export function getEvenementsByReserveId(reserveId: string): EvenementReserve[] {
-  return evenementsReserve
-    .filter((e) => e.reserveId === reserveId)
-    .sort((a, b) => new Date(a.dateHeure).getTime() - new Date(b.dateHeure).getTime());
+  return [...(obtenirIndexes().evenementsReserve.byReserveId.get(reserveId) ?? [])].sort(
+    (a, b) => new Date(a.dateHeure).getTime() - new Date(b.dateHeure).getTime()
+  );
 }
 export function addEvenementReserve(evenement: EvenementReserve): void {
   evenementsReserve.push(evenement);
+  invaliderIndexes();
 }
 
 // ============================================================================
@@ -706,26 +796,28 @@ export function getAllUtilisateurs(): Utilisateur[] {
   return [...utilisateurs];
 }
 export function getUtilisateurById(id: string): Utilisateur | undefined {
-  return utilisateurs.find((u) => u.id === id);
+  return obtenirIndexes().utilisateurs.byId.get(id);
 }
 export function getUtilisateurByEmail(email: string): Utilisateur | undefined {
-  return utilisateurs.find((u) => u.email === email);
+  return obtenirIndexes().utilisateurs.byEmail.get(email);
 }
 export function getUtilisateursByRole(role: RoleUtilisateur): Utilisateur[] {
-  return utilisateurs.filter((u) => u.role === role);
+  return [...(obtenirIndexes().utilisateurs.byRole.get(role) ?? [])];
 }
 export function getUtilisateurByTechnicienId(technicienId: string): Utilisateur | undefined {
-  return utilisateurs.find((u) => u.technicienId === technicienId);
+  return obtenirIndexes().utilisateurs.byTechnicienId.get(technicienId);
 }
 export function getUtilisateursByClientId(clientId: string): Utilisateur[] {
-  return utilisateurs.filter((u) => u.clientId === clientId);
+  return [...(obtenirIndexes().utilisateurs.byClientId.get(clientId) ?? [])];
 }
 export function addUtilisateur(utilisateur: Utilisateur): void {
   utilisateurs.push(utilisateur);
+  invaliderIndexes();
 }
 export function updateUtilisateur(utilisateur: Utilisateur): void {
   const index = utilisateurs.findIndex((u) => u.id === utilisateur.id);
   if (index !== -1) utilisateurs[index] = utilisateur;
+  invaliderIndexes();
 }
 
 export function getAllRolesDefinitions(): RoleDefinition[] {
@@ -746,20 +838,21 @@ export function getAllIntegrationsExternes(): IntegrationExterne[] {
   return [...integrationsExternes];
 }
 export function getIntegrationExterneById(id: string): IntegrationExterne | undefined {
-  return integrationsExternes.find((i) => i.id === id);
+  return obtenirIndexes().integrationsExternes.byId.get(id);
 }
 export function updateIntegrationExterne(integration: IntegrationExterne): void {
   const index = integrationsExternes.findIndex((i) => i.id === integration.id);
   if (index !== -1) integrationsExternes[index] = integration;
+  invaliderIndexes();
 }
 
 export function getAllJournalEchangesIntegration(): JournalEchangeIntegration[] {
   return [...journalEchangesIntegration];
 }
 export function getJournalEchangesByIntegrationId(integrationId: string): JournalEchangeIntegration[] {
-  return journalEchangesIntegration
-    .filter((j) => j.integrationId === integrationId)
-    .sort((a, b) => new Date(b.dateHeure).getTime() - new Date(a.dateHeure).getTime());
+  return [...(obtenirIndexes().journalEchangesIntegration.byIntegrationId.get(integrationId) ?? [])].sort(
+    (a, b) => new Date(b.dateHeure).getTime() - new Date(a.dateHeure).getTime()
+  );
 }
 
 // ============================================================================
@@ -770,55 +863,61 @@ export function getAllSessionsTechnicien(): SessionTechnicien[] {
   return [...sessionsTechnicien];
 }
 export function getSessionTechnicienById(id: string): SessionTechnicien | undefined {
-  return sessionsTechnicien.find((s) => s.id === id);
+  return obtenirIndexes().sessionsTechnicien.byId.get(id);
 }
 export function getSessionActiveDuTechnicien(technicienId: string): SessionTechnicien | undefined {
-  return sessionsTechnicien.find((s) => s.technicienId === technicienId);
+  return obtenirIndexes().sessionsTechnicien.byTechnicienId.get(technicienId)?.[0];
 }
 export function addSessionTechnicien(session: SessionTechnicien): void {
   sessionsTechnicien.push(session);
+  invaliderIndexes();
 }
 export function updateSessionTechnicien(session: SessionTechnicien): void {
   const index = sessionsTechnicien.findIndex((s) => s.id === session.id);
   if (index !== -1) sessionsTechnicien[index] = session;
+  invaliderIndexes();
 }
 
 export function getAllElementsFileSynchronisation(): ElementFileSynchronisation[] {
   return [...elementsFileSynchronisation];
 }
 export function getElementsFileSynchronisationByTechnicienId(technicienId: string): ElementFileSynchronisation[] {
-  return elementsFileSynchronisation
-    .filter((e) => e.technicienId === technicienId)
-    .sort((a, b) => new Date(b.horodatageEvenement).getTime() - new Date(a.horodatageEvenement).getTime());
+  return [...(obtenirIndexes().elementsFileSynchronisation.byTechnicienId.get(technicienId) ?? [])].sort(
+    (a, b) => new Date(b.horodatageEvenement).getTime() - new Date(a.horodatageEvenement).getTime()
+  );
 }
 export function getElementFileSynchronisationById(id: string): ElementFileSynchronisation | undefined {
-  return elementsFileSynchronisation.find((e) => e.id === id);
+  return obtenirIndexes().elementsFileSynchronisation.byId.get(id);
 }
 export function addElementFileSynchronisation(element: ElementFileSynchronisation): void {
   elementsFileSynchronisation.push(element);
+  invaliderIndexes();
 }
 export function updateElementFileSynchronisation(element: ElementFileSynchronisation): void {
   const index = elementsFileSynchronisation.findIndex((e) => e.id === element.id);
   if (index !== -1) elementsFileSynchronisation[index] = element;
+  invaliderIndexes();
 }
 
 export function getAppareilsTelechargesByTechnicienId(technicienId: string): AppareilTelechargeLocalement[] {
-  return appareilsTelechargesLocalement.filter((a) => a.technicienId === technicienId);
+  return [...(obtenirIndexes().appareilsTelechargesLocalement.byTechnicienId.get(technicienId) ?? [])];
 }
 export function addAppareilTelechargeLocalement(entree: AppareilTelechargeLocalement): void {
   appareilsTelechargesLocalement.push(entree);
+  invaliderIndexes();
 }
 
 export function getConfigurationPTI(technicienId: string): ConfigurationPTI | undefined {
   return configurationsPTI[technicienId];
 }
 export function getEtatPTIByTechnicienId(technicienId: string): EtatPTITechnicien | undefined {
-  return etatsPTITechnicien.find((e) => e.technicienId === technicienId);
+  return obtenirIndexes().etatsPTITechnicien.byTechnicienId.get(technicienId);
 }
 export function updateEtatPTITechnicien(etat: EtatPTITechnicien): void {
   const index = etatsPTITechnicien.findIndex((e) => e.technicienId === etat.technicienId);
   if (index !== -1) etatsPTITechnicien[index] = etat;
   else etatsPTITechnicien.push(etat);
+  invaliderIndexes();
 }
 
 // ============================================================================
@@ -829,21 +928,21 @@ export function getAllPositionsTechnicien(): PositionTechnicien[] {
   return [...positionsTechnicien];
 }
 export function getPositionByTechnicienId(technicienId: string): PositionTechnicien | undefined {
-  return positionsTechnicien.find((p) => p.technicienId === technicienId);
+  return obtenirIndexes().positionsTechnicien.byTechnicienId.get(technicienId);
 }
 
 export function getAllZonesGeographiques(): ZoneGeographique[] {
   return [...zonesGeographiques];
 }
 export function getZoneGeographiqueById(id: string): ZoneGeographique | undefined {
-  return zonesGeographiques.find((z) => z.id === id);
+  return obtenirIndexes().zonesGeographiques.byId.get(id);
 }
 
 export function getAllTourneesDuJour(): TourneeDuJour[] {
   return [...tourneesDuJour];
 }
 export function getTourneeDuJourByTechnicienId(technicienId: string): TourneeDuJour | undefined {
-  return tourneesDuJour.find((t) => t.technicienId === technicienId);
+  return obtenirIndexes().tourneesDuJour.byTechnicienId.get(technicienId);
 }
 
 /**
@@ -856,18 +955,20 @@ export function getAllTachesAsynchrones(): TacheAsynchrone[] {
   return tachesAsynchrones.map((t) => calculerProgressionTache(t));
 }
 export function getTacheAsynchroneById(id: string): TacheAsynchrone | undefined {
-  const tache = tachesAsynchrones.find((t) => t.id === id);
+  const tache = obtenirIndexes().tachesAsynchrones.byId.get(id);
   return tache ? calculerProgressionTache(tache) : undefined;
 }
 export function getTachesAsynchronesByUtilisateurId(utilisateurId: string): TacheAsynchrone[] {
-  return tachesAsynchrones.filter((t) => t.demandeParUtilisateurId === utilisateurId).map((t) => calculerProgressionTache(t));
+  return (obtenirIndexes().tachesAsynchrones.byUtilisateurId.get(utilisateurId) ?? []).map((t) => calculerProgressionTache(t));
 }
 export function addTacheAsynchrone(tache: TacheAsynchrone): void {
   tachesAsynchrones.push(tache);
+  invaliderIndexes();
 }
 export function updateTacheAsynchrone(tache: TacheAsynchrone): void {
   const index = tachesAsynchrones.findIndex((t) => t.id === tache.id);
   if (index !== -1) tachesAsynchrones[index] = tache;
+  invaliderIndexes();
 }
 
 function calculerProgressionTache(tache: TacheAsynchrone): TacheAsynchrone {
@@ -882,16 +983,21 @@ export function getAllNotifications(): Notification[] {
   return [...notifications].sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime());
 }
 export function getNotificationById(id: string): Notification | undefined {
-  return notifications.find((n) => n.id === id);
+  return obtenirIndexes().notifications.byId.get(id);
 }
 export function getNotificationsByUtilisateurId(utilisateurId: string): Notification[] {
-  return getAllNotifications().filter((n) => n.destinataireUtilisateurId === utilisateurId);
+  return [...(obtenirIndexes().notifications.byUtilisateurId.get(utilisateurId) ?? [])].sort(
+    (a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime()
+  );
 }
 export function getNotificationsByRole(role: RoleUtilisateur): Notification[] {
-  return getAllNotifications().filter((n) => n.destinataireRole === role);
+  return [...(obtenirIndexes().notifications.byRole.get(role) ?? [])].sort(
+    (a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime()
+  );
 }
 export function addNotification(notification: Notification): void {
   notifications.push(notification);
+  invaliderIndexes();
 }
 export function marquerNotificationLue(id: string): void {
   const notif = notifications.find((n) => n.id === id);
@@ -905,10 +1011,13 @@ export function getAllEntreesAudit(): EntreeAudit[] {
   return [...entreesAudit].sort((a, b) => new Date(b.dateHeure).getTime() - new Date(a.dateHeure).getTime());
 }
 export function getEntreesAuditByEntiteId(entiteId: string): EntreeAudit[] {
-  return getAllEntreesAudit().filter((e) => e.entiteId === entiteId);
+  return [...(obtenirIndexes().entreesAudit.byEntiteId.get(entiteId) ?? [])].sort(
+    (a, b) => new Date(b.dateHeure).getTime() - new Date(a.dateHeure).getTime()
+  );
 }
 export function addEntreeAudit(entree: EntreeAudit): void {
   entreesAudit.push(entree);
+  invaliderIndexes();
 }
 
 // ============================================================================

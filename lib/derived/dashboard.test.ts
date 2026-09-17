@@ -38,6 +38,16 @@ vi.mock('@/data/store', () => ({
   getReserveCTQById: () => undefined,
   getRiskScoreForAscenseur: () => undefined,
   getTechnicienById: () => undefined,
+  // Lectures par clé étrangère du store : même résultat que le filtrage
+  // manuel qu'elles remplacent dans dashboard.ts, l'implémentation réelle
+  // n'étant qu'un accès indexé aux mêmes tableaux.
+  getInterventionsByAscenseurId: (ascenseurId: string) =>
+    magasin.interventions.filter((i) => i.ascenseurId === ascenseurId),
+  getInterventionsByTechnicienId: (technicienId: string) =>
+    magasin.interventions.filter((i) => i.technicienId === technicienId),
+  getMaintenancesByTechnicienId: (technicienId: string) =>
+    magasin.maintenances.filter((m) => m.technicienId === technicienId),
+  getTicketsNonRapproches: () => [],
 }));
 
 import { getActiviteParJour, getTopAscenseursRisque, type AscenseurAvecRisque, type JourActivite } from './dashboard';
