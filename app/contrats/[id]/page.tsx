@@ -18,8 +18,6 @@ import { LIBELLE_FREQUENCE_MAINTENANCE, LIBELLE_NIVEAU_SLA } from '@/lib/derived
 import { LIBELLE_NIVEAU_URGENCE } from '@/lib/derived/libelles-interventions';
 import { LienClient, LienContrat } from '@/components/Liens';
 
-export const dynamic = 'force-dynamic';
-
 interface ContratDetailPageProps {
   params: { id: string };
 }

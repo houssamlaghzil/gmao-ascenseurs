@@ -24,8 +24,6 @@ import { calculerStatutControle } from '@/domain/business-logic';
 import InformationsControle from './components/InformationsControle';
 import BlocsControle, { type DetailReservePoint } from './components/BlocsControle';
 
-export const dynamic = 'force-dynamic';
-
 interface CtqDetailPageProps {
   params: { id: string };
 }

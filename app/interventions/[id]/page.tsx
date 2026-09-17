@@ -31,8 +31,6 @@ import GestionnaireTickets from './components/GestionnaireTickets';
 import RapportsAssocies from './components/RapportsAssocies';
 import ReattributionPanel, { type ReaffectationAffichee } from './components/ReattributionPanel';
 
-export const dynamic = 'force-dynamic';
-
 interface InterventionDetailPageProps {
   params: { id: string };
 }

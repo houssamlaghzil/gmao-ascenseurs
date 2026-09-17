@@ -11,8 +11,6 @@ import { StatutTacheAsynchrone } from '@/domain/types';
 import { getAllTachesAsynchrones, getUtilisateurById } from '@/data/store';
 import TacheCard from './components/TacheCard';
 
-export const dynamic = 'force-dynamic';
-
 const ORDRE_STATUT: Record<StatutTacheAsynchrone, number> = {
   [StatutTacheAsynchrone.EN_COURS]: 0,
   [StatutTacheAsynchrone.EN_ATTENTE]: 1,

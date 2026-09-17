@@ -15,8 +15,6 @@ import BandeauConnexion from '@/app/mobile/components/BandeauConnexion';
 import { StatutMaintenanceBadge } from '@/components/StatusBadges';
 import MaintenanceWizard from './MaintenanceWizard';
 
-export const dynamic = 'force-dynamic';
-
 interface MaintenanceMobilePageProps {
   params: { id: string };
 }

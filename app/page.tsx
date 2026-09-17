@@ -45,8 +45,6 @@ import {
   getUrgences,
 } from '@/lib/derived/dashboard';
 
-export const dynamic = 'force-dynamic';
-
 /** Style partagé des petits liens "voir le détail" nichés sous un graphique. */
 const LIEN_DETAIL_CARTE =
   'inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded';

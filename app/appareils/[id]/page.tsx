@@ -49,8 +49,6 @@ import HistoriqueTab from '@/app/parc/[id]/components/HistoriqueTab';
 import SidebarSite from './components/SidebarSite';
 import HistoriqueEtats from './components/HistoriqueEtats';
 
-export const dynamic = 'force-dynamic';
-
 interface FicheAppareilPageProps {
   params: { id: string };
 }

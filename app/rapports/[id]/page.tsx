@@ -27,8 +27,6 @@ import EtatEtClotureRapport from './components/EtatEtClotureRapport';
 import PhotosRapport from './components/PhotosRapport';
 import SignaturesRapport from './components/SignaturesRapport';
 
-export const dynamic = 'force-dynamic';
-
 interface RapportDetailPageProps {
   params: { id: string };
 }

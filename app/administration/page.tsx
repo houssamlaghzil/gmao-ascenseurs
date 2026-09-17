@@ -27,8 +27,6 @@ import ReglesMetierTab from './components/ReglesMetierTab';
 import NotificationsTab from './components/NotificationsTab';
 import AuditLogsTab from './components/AuditLogsTab';
 
-export const dynamic = 'force-dynamic';
-
 export default function AdministrationPage() {
   const utilisateurs = getAllUtilisateurs();
   const roles = getAllRolesDefinitions();

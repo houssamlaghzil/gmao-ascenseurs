@@ -8,8 +8,6 @@ import { Plug } from 'lucide-react';
 import { getAllIntegrationsExternes, getJournalEchangesByIntegrationId } from '@/data/store';
 import IntegrationCard from './components/IntegrationCard';
 
-export const dynamic = 'force-dynamic';
-
 export default function IntegrationsPage() {
   const integrations = getAllIntegrationsExternes();
 

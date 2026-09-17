@@ -18,8 +18,6 @@ import { LIBELLE_CATEGORIE_PHOTO, LIBELLE_STATUT_SIGNATURE_CLIENT } from '@/lib/
 import { formatDate } from '@/lib/utils';
 import BoutonImprimer from './components/BoutonImprimer';
 
-export const dynamic = 'force-dynamic';
-
 interface RapportPdfPageProps {
   params: { id: string };
 }

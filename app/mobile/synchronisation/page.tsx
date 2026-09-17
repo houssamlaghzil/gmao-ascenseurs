@@ -22,8 +22,6 @@ import BandeauConnexion from '@/app/mobile/components/BandeauConnexion';
 import WidgetPTI from '@/app/mobile/components/WidgetPTI';
 import { reessayerElementSync } from './actions';
 
-export const dynamic = 'force-dynamic';
-
 function formatOctets(tailleOctets: number): string {
   if (tailleOctets < 1024) return `${tailleOctets} o`;
   const ko = tailleOctets / 1024;

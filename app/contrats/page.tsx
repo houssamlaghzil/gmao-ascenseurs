@@ -10,8 +10,6 @@ import { FileSignature } from 'lucide-react';
 import { getAllContrats, getAscenseursByContratId, getClientById } from '@/data/store';
 import TableauContrats, { type LigneContrat } from './components/TableauContrats';
 
-export const dynamic = 'force-dynamic';
-
 export default function ContratsPage() {
   const lignes: LigneContrat[] = getAllContrats()
     .map((contrat) => ({

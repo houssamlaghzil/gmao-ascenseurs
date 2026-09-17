@@ -29,8 +29,6 @@ import StatutInterventionBadge from '@/components/StatutInterventionBadge';
 import { formatDate } from '@/lib/utils';
 import ModifierAccesForm from './components/ModifierAccesForm';
 
-export const dynamic = 'force-dynamic';
-
 interface FicheAppareilMobilePageProps {
   params: { id: string };
 }
