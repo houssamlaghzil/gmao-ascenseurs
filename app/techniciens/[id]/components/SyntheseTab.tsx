@@ -9,6 +9,7 @@ import { Tournee } from '@/domain/types';
 import StatCard from '@/components/StatCard';
 import { formatDistanceToNow } from '@/lib/utils';
 import type { LigneTechnicienListe } from '@/lib/derived/techniciens-liste';
+import { LienTechnicien, LienTournee } from '@/components/Liens';
 
 interface SyntheseTabProps {
   ligne: LigneTechnicienListe;
@@ -103,9 +104,11 @@ export default function SyntheseTab({ ligne, tournees, nombreAppareilsCouverts, 
               {tournees.map((tournee) => (
                 <li key={tournee.id} className="border border-gray-100 rounded-md px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-2 text-sm font-medium text-gray-900">
+                    <span className="inline-flex items-center gap-2 text-sm font-medium">
                       <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: tournee.couleur ?? '#94a3b8' }} />
-                      {tournee.nom}
+                      <LienTournee id={tournee.id} className="text-gray-900">
+                        {tournee.nom}
+                      </LienTournee>
                     </span>
                     {!tournee.actif && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border bg-gray-100 text-gray-600 border-gray-200">
@@ -119,8 +122,10 @@ export default function SyntheseTab({ ligne, tournees, nombreAppareilsCouverts, 
                 </li>
               ))}
               <li className="text-xs text-gray-500 pt-1">
-                {nombreAppareilsCouverts.toLocaleString('fr-FR')} appareil{nombreAppareilsCouverts > 1 ? 's' : ''} couvert
-                {nombreAppareilsCouverts > 1 ? 's' : ''} au total
+                <LienTechnicien id={technicien.id} ton="sobre">
+                  {nombreAppareilsCouverts.toLocaleString('fr-FR')} appareil{nombreAppareilsCouverts > 1 ? 's' : ''} couvert
+                  {nombreAppareilsCouverts > 1 ? 's' : ''} au total
+                </LienTechnicien>
               </li>
             </ul>
           )}

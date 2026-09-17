@@ -7,6 +7,7 @@ import { AlertTriangle } from 'lucide-react';
 import { Contrat } from '@/domain/types';
 import { StatutContratBadge } from '@/components/StatusBadges';
 import { LIBELLE_FREQUENCE_MAINTENANCE, LIBELLE_NIVEAU_SLA } from '@/lib/derived/libelles-contrats';
+import { LienClient } from '@/components/Liens';
 
 export interface LigneContrat {
   contrat: Contrat;
@@ -57,7 +58,11 @@ export default function TableauContrats({ lignes }: TableauContratsProps) {
                       {contrat.numero}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{clientNom}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                    <LienClient id={contrat.clientId} ton="sobre">
+                      {clientNom}
+                    </LienClient>
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
                     <span className="text-gray-900">{contrat.nombreAppareilsCouverts}</span>
                     {ecart && (

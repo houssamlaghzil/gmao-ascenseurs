@@ -310,6 +310,20 @@ function jitterCoordonnees(ville: VilleRef): Coordonnees {
   return { latitude: ville.latitude + decalage(), longitude: ville.longitude + decalage() };
 }
 
+/**
+ * Position d'un appareil sur la carte, dispersée autour du centre de sa ville.
+ *
+ * Utilise un PRNG local semé par l'identifiant plutôt que le PRNG global :
+ * la position est stable d'un build à l'autre et l'ajout de cette donnée ne
+ * décale pas la séquence partagée (sinon toutes les données de démonstration
+ * changeraient). Ce ne sont pas de vraies adresses géocodées.
+ */
+function coordonneesAppareil(ascenseurId: string, ville: VilleRef): Coordonnees {
+  const local = mulberry32(hashChaine(`gps-${ascenseurId}`));
+  const decalage = () => (local() < 0.5 ? 1 : -1) * (0.004 + local() * 0.045);
+  return { latitude: ville.latitude + decalage(), longitude: ville.longitude + decalage() };
+}
+
 interface DefinitionSecteur {
   nom: string;
   villes: string[];
@@ -1126,6 +1140,10 @@ export const ascenseurs: Ascenseur[] = ascenseursPlan.map((plan, i) => {
   const statutAppareil = randWeighted(STATUTS_APPAREIL_PONDERES);
   const id = `asc-${pad(i + 1, 4)}`;
   const fiche = genererFicheTechnique(parc.type);
+  // Position sur la carte : dérivée de l'identifiant, pas du PRNG global — ajouter
+  // un tirage dans cette boucle décalerait toute la séquence et changerait
+  // l'intégralité des données de démonstration.
+  fiche.localisationGPS = coordonneesAppareil(id, ville);
 
   let modeDegrade: DetailModeDegrade | undefined;
   if (statutAppareil === StatutAppareil.MODE_DEGRADE && technicienAffecte) {
@@ -1451,7 +1469,13 @@ for (const asc of ascenseurs) {
     occurrences.push({ categorie: CategorieMaintenance.PERIODIQUE, dateMs });
   }
   if (!contrat || contrat.maintenanceCableIncluse) {
-    occurrences.push({ categorie: CategorieMaintenance.CABLE, dateMs: DEBUT_ANNEE_MS + (150 + offsetAscenseur) * JOUR_MS });
+    // Deux passages câble par an, répartis — un en début d'année, un en fin,
+    // conformément à l'obligation contractuelle. Le calendrier n'en posait
+    // qu'un seul, ce qui créait un déficit de conformité uniforme sur tout le
+    // parc et masquait le vrai signal, celui des visites périodiques.
+    for (const dateMs of datesDuesAnnee(2, offsetAscenseur)) {
+      occurrences.push({ categorie: CategorieMaintenance.CABLE, dateMs });
+    }
   }
   if (!contrat || contrat.maintenanceParachuteIncluse) {
     occurrences.push({ categorie: CategorieMaintenance.PARACHUTE, dateMs: DEBUT_ANNEE_MS + (150 + offsetAscenseur + randInt(-8, 8)) * JOUR_MS });

@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { StatutControleCTQBadge } from '@/components/StatusBadges';
 import { formatDate } from '@/lib/utils';
 import type { LigneControleCTQListe } from '@/lib/derived/ctq-liste';
+import { LienAppareil, LienClient, LienTechnicien } from '@/components/Liens';
 
 export default function TableauControlesCTQ({ lignes }: { lignes: LigneControleCTQListe[] }) {
   if (lignes.length === 0) {
@@ -37,9 +38,15 @@ export default function TableauControlesCTQ({ lignes }: { lignes: LigneControleC
                   {ligne.numero}
                 </Link>
               </td>
-              <td className="px-4 py-3 whitespace-nowrap">{ligne.appareilCode}</td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                <LienAppareil ascenseurId={ligne.appareilId} ton="sobre">
+                  {ligne.appareilCode}
+                </LienAppareil>
+              </td>
               <td className="px-4 py-3 max-w-[200px] truncate" title={ligne.clientNom}>
-                {ligne.clientNom}
+                <LienClient id={ligne.clientId} ton="sobre">
+                  {ligne.clientNom}
+                </LienClient>
               </td>
               <td className="px-4 py-3 whitespace-nowrap">{formatDate(new Date(ligne.dateVisite))}</td>
               <td className="px-4 py-3 whitespace-nowrap">{ligne.bureauEtudesNom}</td>
@@ -49,7 +56,15 @@ export default function TableauControlesCTQ({ lignes }: { lignes: LigneControleC
               <td className="px-4 py-3 whitespace-nowrap">
                 <StatutControleCTQBadge statut={ligne.statut} />
               </td>
-              <td className="px-4 py-3 whitespace-nowrap">{ligne.technicienNom ?? '—'}</td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                {ligne.technicienId && ligne.technicienNom ? (
+                  <LienTechnicien id={ligne.technicienId} ton="sobre">
+                    {ligne.technicienNom}
+                  </LienTechnicien>
+                ) : (
+                  ligne.technicienNom ?? '—'
+                )}
+              </td>
             </tr>
           ))}
         </tbody>

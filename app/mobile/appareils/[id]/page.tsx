@@ -71,7 +71,7 @@ export default function FicheAppareilMobilePage({ params }: FicheAppareilMobileP
         </div>
         {ascenseur.nom && <p className="text-xs text-gray-500 mt-0.5">{ascenseur.nom}</p>}
         <p className="text-sm text-gray-600 mt-1">
-          {ascenseur.adresseComplete}, {ascenseur.ville}
+          {ascenseur.adresseComplete}
         </p>
         <p className="text-xs text-gray-500 mt-0.5">{client?.raisonSociale ?? 'Client inconnu'}</p>
       </div>

@@ -20,6 +20,7 @@ import { CategorieMaintenance, MaintenanceAvecUrgence, StatutMaintenance, TypeMa
 import { getAscenseurById, getTechnicienById, getTourneeById } from '@/data/store';
 import { CategorieMaintenanceBadge, StatutMaintenanceBadge } from '@/components/StatusBadges';
 import { formatDate } from '@/lib/utils';
+import { LienTechnicien, LienTournee, LienVille } from '@/components/Liens';
 
 const STATUTS_AVEC_DUREE: StatutMaintenance[] = [StatutMaintenance.EN_COURS_DE_REALISATION, StatutMaintenance.REALISEE];
 
@@ -56,13 +57,19 @@ export default function LigneMaintenance({ maintenance, typesMaintenanceRef }: L
 
       <td className="px-4 py-3 whitespace-nowrap">
         {ascenseur ? (
-          <Link href={`/parc/${ascenseur.id}`} className="text-blue-600 hover:underline font-medium">
+          <Link href={`/appareils/${ascenseur.id}`} className="text-blue-600 hover:underline font-medium">
             {ascenseur.code}
           </Link>
         ) : (
           '—'
         )}
-        {ascenseur && <div className="text-xs text-gray-500">{ascenseur.ville}</div>}
+        {ascenseur && (
+          <div className="text-xs text-gray-500">
+            <LienVille id={ascenseur.ville} ton="sobre">
+              {ascenseur.ville}
+            </LienVille>
+          </div>
+        )}
       </td>
 
       <td className="px-4 py-3 whitespace-nowrap">
@@ -104,8 +111,22 @@ export default function LigneMaintenance({ maintenance, typesMaintenanceRef }: L
       </td>
 
       <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-700">
-        <div>{technicien?.nomComplet ?? '—'}</div>
-        {tournee && <div className="text-gray-500">{tournee.nom}</div>}
+        <div>
+          {technicien ? (
+            <LienTechnicien id={technicien.id} ton="sobre">
+              {technicien.nomComplet}
+            </LienTechnicien>
+          ) : (
+            '—'
+          )}
+        </div>
+        {tournee && (
+          <div className="text-gray-500">
+            <LienTournee id={tournee.id} ton="sobre">
+              {tournee.nom}
+            </LienTournee>
+          </div>
+        )}
       </td>
     </tr>
   );

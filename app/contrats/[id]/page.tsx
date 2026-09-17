@@ -16,6 +16,7 @@ import {
 import { StatutContratBadge } from '@/components/StatusBadges';
 import { LIBELLE_FREQUENCE_MAINTENANCE, LIBELLE_NIVEAU_SLA } from '@/lib/derived/libelles-contrats';
 import { LIBELLE_NIVEAU_URGENCE } from '@/lib/derived/libelles-interventions';
+import { LienClient, LienContrat } from '@/components/Liens';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,7 +73,15 @@ export default function ContratDetailPage({ params }: ContratDetailPageProps) {
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{contrat.numero}</h1>
-            <p className="text-sm text-gray-600 mt-1">{client?.raisonSociale ?? 'Client inconnu'}</p>
+            <p className="text-sm text-gray-600 mt-1">
+              {client ? (
+                <LienClient id={client.id} ton="sobre">
+                  {client.raisonSociale}
+                </LienClient>
+              ) : (
+                'Client inconnu'
+              )}
+            </p>
           </div>
           <StatutContratBadge statut={contrat.statut} />
         </div>
@@ -85,6 +94,9 @@ export default function ContratDetailPage({ params }: ContratDetailPageProps) {
             <Champ label="Appareils couverts (déclaré)">
               {contrat.nombreAppareilsCouverts}
               {ecartAppareils && <span className="block text-xs text-amber-600 mt-0.5">Décompte réel : {nombreAppareilsReel}</span>}
+              <LienContrat id={contrat.id} ton="sobre" className="block mt-1 text-xs">
+                Voir les appareils couverts
+              </LienContrat>
             </Champ>
             <Champ label="Sites couverts">{contrat.parcIds.length}</Champ>
             <Champ label="Période">

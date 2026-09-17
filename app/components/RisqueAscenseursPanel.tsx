@@ -10,6 +10,7 @@ import RiskBadge from '@/components/RiskBadge';
 import Sparkline from '@/components/charts/Sparkline';
 import { AscenseurRisqueAffiche } from '@/lib/derived/dashboard';
 import { RiskLevel } from '@/domain/types';
+import { lienAppareil } from '@/lib/derived/explorer';
 
 interface RisqueAscenseursPanelProps {
   items: AscenseurRisqueAffiche[];
@@ -31,7 +32,7 @@ export default function RisqueAscenseursPanel({ items }: RisqueAscenseursPanelPr
           {items.map(({ ascenseur, risk, tendance7j }) => (
             <Link
               key={ascenseur.id}
-              href={`/ascenseurs/${ascenseur.id}`}
+              href={lienAppareil(ascenseur.id)}
               className="flex items-center gap-4 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-sm transition-all"
             >
               <div className="flex-1 min-w-0">

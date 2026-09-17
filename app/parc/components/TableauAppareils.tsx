@@ -52,7 +52,7 @@ export default function TableauAppareils({ lignes }: { lignes: LigneAppareilList
           {lignes.map((ligne) => (
             <tr key={ligne.id} className="hover:bg-gray-50">
               <td className="px-4 py-3 whitespace-nowrap">
-                <Link href={`/parc/${ligne.id}`} className="font-medium text-blue-600 hover:underline">
+                <Link href={`/appareils/${ligne.id}`} className="font-medium text-blue-600 hover:underline">
                   {ligne.code}
                 </Link>
               </td>

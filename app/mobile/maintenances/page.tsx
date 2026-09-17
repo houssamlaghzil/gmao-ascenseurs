@@ -38,7 +38,7 @@ function CarteMaintenance({ maintenance }: { maintenance: MaintenanceAvecUrgence
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-gray-900">{ascenseur?.code ?? maintenance.ascenseurId}</p>
-          <p className="truncate text-xs text-gray-500">{ascenseur ? `${ascenseur.adresseComplete}, ${ascenseur.ville}` : ''}</p>
+          <p className="truncate text-xs text-gray-500">{ascenseur ? `${ascenseur.adresseComplete}` : ''}</p>
         </div>
         <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-gray-300" />
       </div>

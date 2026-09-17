@@ -20,6 +20,7 @@ import {
 import Timeline from '@/components/Timeline';
 import { EtatConnexionMobileBadge, StatutPresenceTechnicienBadge, StatutSessionTechnicienBadge, StatutSynchronisationBadge } from '@/components/StatusBadges';
 import { formatDate, formatDistanceToNow } from '@/lib/utils';
+import { LienVille } from '@/components/Liens';
 
 interface MobileGeolocalisationTabProps {
   session?: SessionTechnicien;
@@ -113,7 +114,9 @@ export default function MobileGeolocalisationTab({
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">Ville approx.</dt>
-                <dd className="text-gray-900">{tourneeVille ?? '—'}</dd>
+                <dd className="text-gray-900">
+                  {tourneeVille ? <LienVille id={tourneeVille}>{tourneeVille}</LienVille> : '—'}
+                </dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">Dernier ping</dt>

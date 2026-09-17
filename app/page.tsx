@@ -7,6 +7,7 @@
  * tendances) vit désormais ici.
  */
 
+import Link from 'next/link';
 import {
   AlertTriangle,
   CalendarCheck,
@@ -20,10 +21,13 @@ import {
 } from 'lucide-react';
 import StatCard from '@/components/StatCard';
 import Card from '@/components/Card';
+import { LienDimension, LienTechnicien } from '@/components/Liens';
 import { DonutChart, GaugeChart, Heatmap } from '@/components/charts';
 import UrgencesPanel from './components/UrgencesPanel';
 import NotificationsPanel from './components/NotificationsPanel';
 import RisqueAscenseursPanel from './components/RisqueAscenseursPanel';
+import { EtatSLA, StatutAppareil } from '@/domain/types';
+import { lienDimension } from '@/lib/derived/explorer';
 import {
   ChargeTechnicien,
   getActiviteParJour,
@@ -41,6 +45,10 @@ import {
 } from '@/lib/derived/dashboard';
 
 export const dynamic = 'force-dynamic';
+
+/** Style partagé des petits liens "voir le détail" nichés sous un graphique. */
+const LIEN_DETAIL_CARTE =
+  'inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded';
 
 const COLOR_STOPS_TAUX = [
   { offset: '0%', color: '#ef4444' },
@@ -68,22 +76,78 @@ export default function TableauDeBordPage() {
     <div className="space-y-8">
       <header>
         <h1 className="text-3xl font-bold text-gray-900">Tableau de bord</h1>
-        <p className="mt-2 text-gray-600">
-          Vue d&apos;ensemble du parc de {kpis.totalAscenseurs.toLocaleString('fr-FR')} ascenseurs
+        <p className="mt-2">
+          <LienDimension dimension="parc" ton="sobre">
+            Vue d&apos;ensemble du parc de {kpis.totalAscenseurs.toLocaleString('fr-FR')} ascenseurs
+          </LienDimension>
         </p>
       </header>
 
-      {/* 3.1 — KPI */}
+      {/* 3.1 — KPI : chaque chiffre agrégé mène à sa décomposition (lib/derived/explorer.ts), jamais à une liste plate. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard title="En service" value={kpis.enService} icon={<CheckCircle2 className="h-7 w-7" />} colorClass="text-emerald-600" />
-        <StatCard title="En panne" value={kpis.enPanne} icon={<AlertTriangle className="h-7 w-7" />} colorClass="text-rose-600" />
-        <StatCard title="À l'arrêt" value={kpis.aLArret} icon={<PauseCircle className="h-7 w-7" />} colorClass="text-orange-600" />
-        <StatCard title="Mode dégradé" value={kpis.modeDegrade} icon={<ShieldAlert className="h-7 w-7" />} colorClass="text-amber-600" />
-        <StatCard title="Interventions ouvertes" value={kpis.interventionsOuvertes} icon={<Wrench className="h-7 w-7" />} colorClass="text-indigo-600" />
-        <StatCard title="Interventions hors SLA" value={kpis.interventionsHorsSLA} icon={<TimerOff className="h-7 w-7" />} colorClass="text-rose-600" />
-        <StatCard title="Maintenances en retard" value={kpis.maintenancesEnRetard} icon={<CalendarClock className="h-7 w-7" />} colorClass="text-orange-600" />
-        <StatCard title="Maintenances cette semaine" value={kpis.maintenancesCetteSemaine} icon={<CalendarCheck className="h-7 w-7" />} colorClass="text-sky-600" />
-        <StatCard title="Tickets non affectés" value={kpis.ticketsNonAffectes} icon={<Inbox className="h-7 w-7" />} colorClass="text-purple-600" />
+        <StatCard
+          title="En service"
+          value={kpis.enService}
+          icon={<CheckCircle2 className="h-7 w-7" />}
+          colorClass="text-emerald-600"
+          href={lienDimension('parc', { statut: StatutAppareil.EN_SERVICE })}
+        />
+        <StatCard
+          title="En panne"
+          value={kpis.enPanne}
+          icon={<AlertTriangle className="h-7 w-7" />}
+          colorClass="text-rose-600"
+          href={lienDimension('parc', { statut: StatutAppareil.EN_PANNE })}
+        />
+        <StatCard
+          title="À l'arrêt"
+          value={kpis.aLArret}
+          icon={<PauseCircle className="h-7 w-7" />}
+          colorClass="text-orange-600"
+          href={lienDimension('parc', { statut: StatutAppareil.A_L_ARRET })}
+        />
+        <StatCard
+          title="Mode dégradé"
+          value={kpis.modeDegrade}
+          icon={<ShieldAlert className="h-7 w-7" />}
+          colorClass="text-amber-600"
+          href={lienDimension('parc', { statut: StatutAppareil.MODE_DEGRADE })}
+        />
+        <StatCard
+          title="Interventions ouvertes"
+          value={kpis.interventionsOuvertes}
+          icon={<Wrench className="h-7 w-7" />}
+          colorClass="text-indigo-600"
+          href="/interventions"
+        />
+        <StatCard
+          title="Interventions hors SLA"
+          value={kpis.interventionsHorsSLA}
+          icon={<TimerOff className="h-7 w-7" />}
+          colorClass="text-rose-600"
+          href={`/interventions?sla=${EtatSLA.DEPASSE}`}
+        />
+        <StatCard
+          title="Maintenances en retard"
+          value={kpis.maintenancesEnRetard}
+          icon={<CalendarClock className="h-7 w-7" />}
+          colorClass="text-orange-600"
+          href="/maintenances"
+        />
+        <StatCard
+          title="Maintenances cette semaine"
+          value={kpis.maintenancesCetteSemaine}
+          icon={<CalendarCheck className="h-7 w-7" />}
+          colorClass="text-sky-600"
+          href="/maintenances"
+        />
+        <StatCard
+          title="Tickets non affectés"
+          value={kpis.ticketsNonAffectes}
+          icon={<Inbox className="h-7 w-7" />}
+          colorClass="text-purple-600"
+          href="/interventions"
+        />
       </div>
 
       {/* 3.2 — Graphiques et tendances */}
@@ -92,10 +156,20 @@ export default function TableauDeBordPage() {
           <div className="flex justify-center">
             <GaugeChart value={tauxDisponibilite} label="Disponibilité" colorStops={COLOR_STOPS_TAUX} />
           </div>
+          <div className="flex justify-center mt-3">
+            <LienDimension dimension="parc" className={LIEN_DETAIL_CARTE}>
+              Voir la répartition du parc
+            </LienDimension>
+          </div>
         </Card>
         <Card title="Respect du SLA" subtitle="Toutes interventions confondues">
           <div className="flex justify-center">
             <GaugeChart value={tauxRespectSLA} label="Dans les délais" colorStops={COLOR_STOPS_TAUX} />
+          </div>
+          <div className="flex justify-center mt-3">
+            <Link href={`/interventions?sla=${EtatSLA.DEPASSE}`} className={LIEN_DETAIL_CARTE}>
+              Voir les interventions hors SLA
+            </Link>
           </div>
         </Card>
         <Card title="Interventions" subtitle="Ouvertes / clôturées">
@@ -105,15 +179,30 @@ export default function TableauDeBordPage() {
             centerValue={kpis.interventionsOuvertes}
             centerLabel="Ouvertes"
           />
+          <div className="flex justify-center mt-3">
+            <Link href="/interventions" className={LIEN_DETAIL_CARTE}>
+              Voir les interventions
+            </Link>
+          </div>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card title="Maintenances" subtitle="Répartition par statut">
           <DonutChart segments={repartitionMaintenances} size={160} centerValue={maintenancesRealisees} centerLabel="Réalisées" />
+          <div className="flex justify-center mt-3">
+            <Link href="/maintenances" className={LIEN_DETAIL_CARTE}>
+              Voir les maintenances
+            </Link>
+          </div>
         </Card>
         <Card title="Causes de panne" subtitle="Répartition par motif d'intervention">
           <DonutChart segments={repartitionCausesPanne} size={160} strokeWidth={20} />
+          <div className="flex justify-center mt-3">
+            <Link href="/interventions" className={LIEN_DETAIL_CARTE}>
+              Voir les interventions
+            </Link>
+          </div>
         </Card>
       </div>
 
@@ -148,7 +237,9 @@ function ChargeTechniciensList({ items }: { items: ChargeTechnicien[] }) {
       {items.map((t) => (
         <div key={t.id}>
           <div className="flex items-center justify-between text-sm mb-1">
-            <span className="font-medium text-gray-700 truncate">{t.nom}</span>
+            <LienTechnicien id={t.id} ton="sobre" className="font-medium truncate">
+              {t.nom}
+            </LienTechnicien>
             <span className="text-gray-500">{t.total}</span>
           </div>
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">

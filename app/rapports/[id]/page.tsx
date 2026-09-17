@@ -21,6 +21,7 @@ import { LIBELLE_RATTACHEMENT_RAPPORT } from '@/lib/derived/libelles-rapports';
 import { StatutValidationRapportBadge } from '@/components/StatusBadges';
 import { formatDate } from '@/lib/utils';
 import { RattachementRapport, StatutValidationRapport } from '@/domain/types';
+import { LienAppareil, LienClient, LienTechnicien } from '@/components/Liens';
 import DiagnosticRapport from './components/DiagnosticRapport';
 import EtatEtClotureRapport from './components/EtatEtClotureRapport';
 import PhotosRapport from './components/PhotosRapport';
@@ -65,13 +66,28 @@ export default function RapportDetailPage({ params }: RapportDetailPageProps) {
             </div>
             {ascenseur && (
               <p className="text-sm text-gray-600 mt-1">
-                {ascenseur.code} — {rapport.adresseAppareil}
+                <LienAppareil ascenseurId={ascenseur.id} ton="sobre">
+                  {ascenseur.code}
+                </LienAppareil>{' '}
+                — {rapport.adresseAppareil}
               </p>
             )}
           </div>
           <div className="text-sm text-gray-600 text-right">
-            <p>{client?.raisonSociale ?? 'Client inconnu'}</p>
-            <p className="text-gray-400">{rapport.technicienNom}</p>
+            <p>
+              {client ? (
+                <LienClient id={client.id} ton="sobre">
+                  {client.raisonSociale}
+                </LienClient>
+              ) : (
+                'Client inconnu'
+              )}
+            </p>
+            <p className="text-gray-400">
+              <LienTechnicien id={rapport.technicienId} ton="sobre">
+                {rapport.technicienNom}
+              </LienTechnicien>
+            </p>
           </div>
         </div>
 
@@ -135,7 +151,14 @@ export default function RapportDetailPage({ params }: RapportDetailPageProps) {
             )}
             <InfoLigne label="Origine de la saisie" valeur={LIBELLE_ORIGINE_ACTION[rapport.origineSaisie]} />
             <hr className="border-gray-100" />
-            <InfoLigne label="Technicien" valeur={rapport.technicienNom} />
+            <InfoLigne
+              label="Technicien"
+              valeur={
+                <LienTechnicien id={rapport.technicienId} ton="sobre">
+                  {rapport.technicienNom}
+                </LienTechnicien>
+              }
+            />
             <InfoLigne label="Début" valeur={formatDate(new Date(rapport.dateHeureDebut))} />
             <InfoLigne label="Fin" valeur={rapport.dateHeureFin ? formatDate(new Date(rapport.dateHeureFin)) : '—'} />
             <InfoLigne label="Durée" valeur={rapport.dureeMinutes != null ? `${rapport.dureeMinutes} min` : '—'} />
@@ -144,6 +167,7 @@ export default function RapportDetailPage({ params }: RapportDetailPageProps) {
           <SignaturesRapport
             signatureTechnicien={rapport.signatureTechnicien}
             signatureClient={rapport.signatureClient}
+            technicienId={rapport.technicienId}
             technicienNom={rapport.technicienNom}
           />
         </div>

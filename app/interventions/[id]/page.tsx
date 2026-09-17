@@ -24,6 +24,7 @@ import {
 import { calculerEtatSLA } from '@/lib/derived/sla';
 import StatutInterventionBadge from '@/components/StatutInterventionBadge';
 import { EtatSLABadge, PrioriteInterventionBadge } from '@/components/StatusBadges';
+import { LienAppareil, LienClient, LienContrat } from '@/components/Liens';
 import InformationsPrincipales from './components/InformationsPrincipales';
 import ChronologieIntervention from './components/ChronologieIntervention';
 import GestionnaireTickets from './components/GestionnaireTickets';
@@ -54,7 +55,9 @@ export default function InterventionDetailPage({ params }: InterventionDetailPag
   const historique: ReaffectationAffichee[] = reaffectations.map((r) => ({
     id: r.id,
     dateHeure: r.dateHeure,
+    ancienTechnicienId: r.ancienTechnicienId,
     ancienTechnicienNom: r.ancienTechnicienId ? getTechnicienById(r.ancienTechnicienId)?.nomComplet : undefined,
+    nouveauTechnicienId: r.nouveauTechnicienId,
     nouveauTechnicienNom: getTechnicienById(r.nouveauTechnicienId)?.nomComplet ?? '—',
     motif: r.motif,
     commentaire: r.commentaire,
@@ -86,13 +89,33 @@ export default function InterventionDetailPage({ params }: InterventionDetailPag
             </div>
             {ascenseur && (
               <p className="text-sm text-gray-600 mt-1">
-                {ascenseur.code} — {ascenseur.adresseComplete}, {ascenseur.ville}
+                <LienAppareil ascenseurId={ascenseur.id} ton="sobre">
+                  {ascenseur.code}
+                </LienAppareil>{' '}
+                — {ascenseur.adresseComplete}
               </p>
             )}
           </div>
           <div className="text-sm text-gray-600 text-right">
-            <p>{client?.raisonSociale ?? 'Client inconnu'}</p>
-            <p className="text-gray-400">Contrat {contrat?.numero ?? '—'}</p>
+            <p>
+              {client ? (
+                <LienClient id={client.id} ton="sobre">
+                  {client.raisonSociale}
+                </LienClient>
+              ) : (
+                'Client inconnu'
+              )}
+            </p>
+            <p className="text-gray-400">
+              Contrat{' '}
+              {contrat ? (
+                <LienContrat id={contrat.id} ton="sobre">
+                  {contrat.numero}
+                </LienContrat>
+              ) : (
+                '—'
+              )}
+            </p>
           </div>
         </div>
       </div>

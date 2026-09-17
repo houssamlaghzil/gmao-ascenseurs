@@ -58,7 +58,7 @@ export default function MaintenancesTechnicienTab({
                 <tr key={maintenance.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 whitespace-nowrap">
                     {ascenseur ? (
-                      <Link href={`/parc/${ascenseur.id}`} className="text-blue-600 hover:underline">
+                      <Link href={`/appareils/${ascenseur.id}`} className="text-blue-600 hover:underline">
                         {ascenseur.code}
                       </Link>
                     ) : (

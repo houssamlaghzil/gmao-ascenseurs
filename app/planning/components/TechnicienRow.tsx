@@ -11,6 +11,7 @@
 import Link from 'next/link';
 import { useDroppable } from '@dnd-kit/core';
 import type { LignePlanningTechnicien } from '@/lib/derived/planning';
+import { LienTechnicien } from '@/components/Liens';
 import TacheCard from './TacheCard';
 
 export default function TechnicienRow({ ligne }: { ligne: LignePlanningTechnicien }) {
@@ -26,9 +27,15 @@ export default function TechnicienRow({ ligne }: { ligne: LignePlanningTechnicie
     >
       <div className="flex items-center justify-between mb-2 gap-2">
         <div className="min-w-0">
-          <Link href={`/techniciens/${ligne.technicien.id}`} className="text-sm font-semibold text-gray-900 hover:text-blue-700 hover:underline truncate">
-            {ligne.technicien.nomComplet}
-          </Link>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link href={`/techniciens/${ligne.technicien.id}`} className="text-sm font-semibold text-gray-900 hover:text-blue-700 hover:underline truncate">
+              {ligne.technicien.nomComplet}
+            </Link>
+            {/* Demande explicite du client : depuis le planning, voir l'ensemble des appareils de la juridiction du technicien et leur état. */}
+            <LienTechnicien id={ligne.technicien.id} ton="sobre" className="text-[11px] font-normal">
+              Voir ses appareils
+            </LienTechnicien>
+          </div>
           <p className="text-xs text-gray-500 truncate">
             {ligne.tourneeNom ?? 'Sans tournée'}
             {ligne.secteurNom ? ` · ${ligne.secteurNom}` : ''}

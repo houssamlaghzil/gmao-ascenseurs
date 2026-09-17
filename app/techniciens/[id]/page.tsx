@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { StatutAbsence } from '@/domain/types';
+import { LienTechnicien } from '@/components/Liens';
 import {
   getAllAbsencesTechnicien,
   getAscenseursByTourneeId,
@@ -141,6 +142,9 @@ export default function FicheTechnicienPage({ params, searchParams }: FicheTechn
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{technicien.nomComplet}</h1>
             <p className="text-sm text-gray-600 mt-1">{technicien.specialite}</p>
+            <LienTechnicien id={technicien.id} ton="accentue" className="mt-2 text-sm">
+              Voir le périmètre d&apos;appareils
+            </LienTechnicien>
           </div>
           <div className="text-sm text-gray-600 text-right">
             {technicien.telephone && <p>{technicien.telephone}</p>}

@@ -23,12 +23,18 @@ import {
   Settings,
   Search,
   ListTodo,
+  Compass,
+  Map,
+  Gauge,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Tableau de bord', icon: LayoutDashboard },
+  { href: '/explorer', label: 'Exploration', icon: Compass },
   { href: '/parc', label: 'Parc', icon: Building2 },
+  { href: '/carte', label: 'Carte', icon: Map },
   { href: '/maintenances', label: 'Maintenances', icon: ClipboardList },
+  { href: '/conformite', label: 'Conformité', icon: Gauge },
   { href: '/interventions', label: 'Interventions', icon: Wrench },
   { href: '/rapports', label: 'Rapports', icon: FileBarChart },
   { href: '/ctq', label: 'CTQ / Réserves', icon: ShieldCheck },

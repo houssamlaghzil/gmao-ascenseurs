@@ -121,7 +121,7 @@ export default function RapportIsolePage({ searchParams }: RapportIsolePageProps
       <div className="flex items-start justify-between gap-2 px-4 pb-2 pt-4">
         <div className="min-w-0">
           <p className="truncate text-xs text-gray-500">
-            {ascenseur.adresseComplete} — {ascenseur.ville}
+            {ascenseur.adresseComplete}
           </p>
           <h1 className="text-lg font-semibold text-gray-900">{ascenseur.code}</h1>
         </div>

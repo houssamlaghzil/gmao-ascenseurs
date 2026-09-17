@@ -8,21 +8,27 @@ import { PenLine } from 'lucide-react';
 import { SignatureClient, SignatureTechnicien } from '@/domain/types';
 import { formatDate } from '@/lib/utils';
 import { StatutSignatureClientBadge } from '@/components/StatusBadges';
+import { LienTechnicien } from '@/components/Liens';
 
 interface SignaturesRapportProps {
   signatureTechnicien?: SignatureTechnicien;
   signatureClient?: SignatureClient;
+  technicienId: string;
   technicienNom: string;
 }
 
-export default function SignaturesRapport({ signatureTechnicien, signatureClient, technicienNom }: SignaturesRapportProps) {
+export default function SignaturesRapport({ signatureTechnicien, signatureClient, technicienId, technicienNom }: SignaturesRapportProps) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
       <h2 className="text-sm font-semibold text-gray-900 mb-4">Signatures</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="border border-gray-200 rounded-md p-4">
           <p className="text-xs font-medium text-gray-500 uppercase">Technicien</p>
-          <p className="text-sm text-gray-900 mt-1">{technicienNom}</p>
+          <p className="text-sm text-gray-900 mt-1">
+            <LienTechnicien id={technicienId} ton="sobre">
+              {technicienNom}
+            </LienTechnicien>
+          </p>
           {signatureTechnicien ? (
             <div className="mt-2 flex items-center gap-2 text-emerald-700 text-xs">
               <PenLine className="h-3.5 w-3.5" />

@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { CalendarClock, ClipboardList, Wrench, UserX, ArrowLeftRight } from 'lucide-react';
 import { TachePlanning, TypeTachePlanning } from '@/domain/types';
 import { formatDate } from '@/lib/utils';
+import { LienAppareil } from '@/components/Liens';
 
 const ICONE_TYPE: Record<TypeTachePlanning, typeof Wrench> = {
   [TypeTachePlanning.MAINTENANCE]: ClipboardList,
@@ -52,7 +53,15 @@ export default function PlanningAVenirTab({ technicienId, taches, total }: Plann
                     <Icone className="h-4 w-4" />
                   </span>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{tache.libelle}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {tache.ascenseurId ? (
+                        <LienAppareil ascenseurId={tache.ascenseurId} ton="sobre" className="!text-inherit">
+                          {tache.libelle}
+                        </LienAppareil>
+                      ) : (
+                        tache.libelle
+                      )}
+                    </p>
                     <p className="text-xs text-gray-500">
                       {formatDate(new Date(tache.dateDebut))} · {tache.statutAffichage}
                       {tache.reaffecte && (

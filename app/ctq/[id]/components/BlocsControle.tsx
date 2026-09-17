@@ -13,6 +13,7 @@ import ReservePanel from './ReservePanel';
 export interface DetailReservePoint {
   reserve: ReserveCTQ;
   photos: PhotoRapport[];
+  technicienId?: string;
   technicienNom?: string;
   traitementReference?: string;
   traitementHref?: string;
@@ -61,6 +62,7 @@ function PointRow({ point, detail }: { point: PointDeControle; detail?: DetailRe
           <ReservePanel
             reserve={detail.reserve}
             photos={detail.photos}
+            technicienId={detail.technicienId}
             technicienNom={detail.technicienNom}
             traitementReference={detail.traitementReference}
             traitementHref={detail.traitementHref}

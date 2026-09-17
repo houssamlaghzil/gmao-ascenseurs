@@ -17,11 +17,14 @@ import { LIBELLE_MOTIF_REATTRIBUTION } from '@/lib/derived/libelles-intervention
 import { LIBELLE_ORIGINE_ACTION } from '@/lib/derived/libelles-parc';
 import { formatDate } from '@/lib/utils';
 import type { OptionFiltre } from '@/lib/derived/parc-liste';
+import { LienTechnicien } from '@/components/Liens';
 
 export interface ReaffectationAffichee {
   id: string;
   dateHeure: string;
+  ancienTechnicienId?: string;
   ancienTechnicienNom?: string;
+  nouveauTechnicienId: string;
   nouveauTechnicienNom: string;
   motif: MotifReattribution;
   commentaire?: string;
@@ -165,8 +168,21 @@ export default function ReattributionPanel({
               <li key={r.id} className="text-sm text-gray-700 border border-gray-100 rounded-md px-3 py-2">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span>
-                    {r.ancienTechnicienNom ? `${r.ancienTechnicienNom} → ` : ''}
-                    <span className="font-medium">{r.nouveauTechnicienNom}</span>
+                    {r.ancienTechnicienId && r.ancienTechnicienNom ? (
+                      <>
+                        <LienTechnicien id={r.ancienTechnicienId} ton="sobre">
+                          {r.ancienTechnicienNom}
+                        </LienTechnicien>{' '}
+                        →{' '}
+                      </>
+                    ) : (
+                      ''
+                    )}
+                    <span className="font-medium">
+                      <LienTechnicien id={r.nouveauTechnicienId} ton="sobre">
+                        {r.nouveauTechnicienNom}
+                      </LienTechnicien>
+                    </span>
                   </span>
                   <span className="text-xs text-gray-400">{formatDate(new Date(r.dateHeure))}</span>
                 </div>

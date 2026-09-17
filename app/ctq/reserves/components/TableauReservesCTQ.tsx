@@ -10,6 +10,7 @@ import { AlertTriangle } from 'lucide-react';
 import { GraviteReserveBadge, StatutReserveBadge } from '@/components/StatusBadges';
 import { formatDate } from '@/lib/utils';
 import type { LigneReserveCTQListe } from '@/lib/derived/reserves-ctq-liste';
+import { LienAppareil, LienClient, LienTechnicien } from '@/components/Liens';
 
 export default function TableauReservesCTQ({ lignes }: { lignes: LigneReserveCTQListe[] }) {
   if (lignes.length === 0) {
@@ -41,9 +42,15 @@ export default function TableauReservesCTQ({ lignes }: { lignes: LigneReserveCTQ
                 </Link>
                 <div className="text-xs text-gray-400 mt-0.5">{ligne.controleNumero}</div>
               </td>
-              <td className="px-4 py-3 whitespace-nowrap">{ligne.appareilCode}</td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                <LienAppareil ascenseurId={ligne.appareilId} ton="sobre">
+                  {ligne.appareilCode}
+                </LienAppareil>
+              </td>
               <td className="px-4 py-3 max-w-[160px] truncate" title={ligne.clientNom}>
-                {ligne.clientNom}
+                <LienClient id={ligne.clientId} ton="sobre">
+                  {ligne.clientNom}
+                </LienClient>
               </td>
               <td className="px-4 py-3 whitespace-nowrap">{ligne.libelleBloc}</td>
               <td className="px-4 py-3 max-w-[280px] truncate" title={ligne.description}>
@@ -66,7 +73,15 @@ export default function TableauReservesCTQ({ lignes }: { lignes: LigneReserveCTQ
                   '—'
                 )}
               </td>
-              <td className="px-4 py-3 whitespace-nowrap">{ligne.technicienNom ?? '—'}</td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                {ligne.technicienId && ligne.technicienNom ? (
+                  <LienTechnicien id={ligne.technicienId} ton="sobre">
+                    {ligne.technicienNom}
+                  </LienTechnicien>
+                ) : (
+                  ligne.technicienNom ?? '—'
+                )}
+              </td>
             </tr>
           ))}
         </tbody>

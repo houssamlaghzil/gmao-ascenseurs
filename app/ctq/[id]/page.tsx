@@ -60,6 +60,7 @@ export default function CtqDetailPage({ params }: CtqDetailPageProps) {
     detailsParPointId.set(reserve.pointDeControleId, {
       reserve,
       photos: getPhotosByReserveId(reserve.id),
+      technicienId: reserve.technicienAssigneId,
       technicienNom: reserve.technicienAssigneId ? getTechnicienById(reserve.technicienAssigneId)?.nomComplet : undefined,
       traitementReference,
       traitementHref,

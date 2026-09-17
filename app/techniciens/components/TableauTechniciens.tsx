@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { MapPin, Wifi, WifiOff } from 'lucide-react';
 import { formatDistanceToNow } from '@/lib/utils';
 import type { LigneTechnicienListe } from '@/lib/derived/techniciens-liste';
+import { LienSecteur } from '@/components/Liens';
 
 interface TableauTechniciensProps {
   lignes: LigneTechnicienListe[];
@@ -69,7 +70,15 @@ export default function TableauTechniciens({ lignes }: TableauTechniciensProps) 
                   <PastilleStatut actif={ligne.technicien.actif} disponible={ligne.technicien.disponible} />
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{ligne.tourneeNom ?? '—'}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{ligne.secteurNom ?? '—'}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                  {ligne.secteurId && ligne.secteurNom ? (
+                    <LienSecteur id={ligne.secteurId} ton="sobre">
+                      {ligne.secteurNom}
+                    </LienSecteur>
+                  ) : (
+                    ligne.secteurNom ?? '—'
+                  )}
+                </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm">
                   {ligne.sessionActive ? (
                     <span className="inline-flex items-center gap-1 text-emerald-700">

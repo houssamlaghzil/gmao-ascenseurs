@@ -9,6 +9,7 @@ import { getAscenseurById } from '@/data/store';
 import { StatutValidationRapportBadge } from '@/components/StatusBadges';
 import { formatDate } from '@/lib/utils';
 import { LIBELLE_TYPE_RAPPORT } from '@/lib/derived/libelles-parc';
+import { LienAppareil } from '@/components/Liens';
 
 export default function RapportsTechnicienTab({ rapports }: { rapports: Rapport[] }) {
   const lignes = [...rapports].sort((a, b) => new Date(b.dateHeureDebut).getTime() - new Date(a.dateHeureDebut).getTime());
@@ -43,7 +44,15 @@ export default function RapportsTechnicienTab({ rapports }: { rapports: Rapport[
                   </Link>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">{LIBELLE_TYPE_RAPPORT[rapport.typeRapport]}</td>
-                <td className="px-4 py-3 whitespace-nowrap">{ascenseur?.code ?? '—'}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  {ascenseur ? (
+                    <LienAppareil ascenseurId={ascenseur.id} ton="sobre">
+                      {ascenseur.code}
+                    </LienAppareil>
+                  ) : (
+                    '—'
+                  )}
+                </td>
                 <td className="px-4 py-3 whitespace-nowrap">{formatDate(new Date(rapport.dateHeureDebut))}</td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <StatutValidationRapportBadge statut={rapport.statutValidation} />

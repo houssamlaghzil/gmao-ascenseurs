@@ -47,7 +47,7 @@ export default function InterventionsTechnicienTab({ interventions }: { interven
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   {ascenseur ? (
-                    <Link href={`/parc/${ascenseur.id}`} className="text-gray-700 hover:underline">
+                    <Link href={`/appareils/${ascenseur.id}`} className="text-gray-700 hover:underline">
                       {ascenseur.code}
                     </Link>
                   ) : (

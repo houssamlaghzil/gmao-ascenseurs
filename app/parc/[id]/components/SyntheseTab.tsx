@@ -70,10 +70,8 @@ export default function SyntheseTab({
             label="Adresse complète"
             value={
               <>
+                {/* `adresseComplete` contient déjà le code postal et la ville. */}
                 {ascenseur.adresseComplete}
-                <br />
-                {ascenseur.codePostal ? `${ascenseur.codePostal} ` : ''}
-                {ascenseur.ville}
               </>
             }
           />

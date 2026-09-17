@@ -128,7 +128,7 @@ export default function CommandPalette() {
                 {resultats.appareils.map((a) => (
                   <Command.Item
                     key={a.id}
-                    onSelect={() => handleSelect(() => router.push(`/parc/${a.id}`))}
+                    onSelect={() => handleSelect(() => router.push(`/appareils/${a.id}`))}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-md cursor-pointer hover:bg-gray-100 transition-colors"
                   >
                     <Building2 className="h-4 w-4 text-blue-600" />

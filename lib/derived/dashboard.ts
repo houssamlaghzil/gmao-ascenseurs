@@ -422,7 +422,7 @@ export function getUrgences(ascenseursAvecRisque: AscenseurAvecRisque[], mainten
         titre: `Intervention ${i.numero}`,
         detail: detailIntervention(i),
         dateHeure: i.dateCreation,
-        href: `/ascenseurs/${i.ascenseurId}`,
+        href: `/interventions/${i.id}`,
       })),
     },
     {
@@ -434,7 +434,7 @@ export function getUrgences(ascenseursAvecRisque: AscenseurAvecRisque[], mainten
         titre: `Intervention ${i.numero}`,
         detail: detailIntervention(i),
         dateHeure: i.dateCreation,
-        href: `/ascenseurs/${i.ascenseurId}`,
+        href: `/interventions/${i.id}`,
       })),
     },
     {
@@ -446,7 +446,7 @@ export function getUrgences(ascenseursAvecRisque: AscenseurAvecRisque[], mainten
         titre: `Intervention ${i.numero}`,
         detail: detailIntervention(i),
         dateHeure: i.dateLimiteSLA,
-        href: `/ascenseurs/${i.ascenseurId}`,
+        href: `/interventions/${i.id}`,
       })),
     },
     {
@@ -458,7 +458,7 @@ export function getUrgences(ascenseursAvecRisque: AscenseurAvecRisque[], mainten
         titre: `${ascenseur.code} — ${ascenseur.ville}`,
         detail: `Risque ${risk.score}/100 · ${ascenseur.statutAppareil === StatutAppareil.EN_PANNE ? 'en panne' : "à l'arrêt"}`,
         dateHeure: depuisQuand(ascenseur.id),
-        href: `/ascenseurs/${ascenseur.id}`,
+        href: `/appareils/${ascenseur.id}`,
       })),
     },
     {

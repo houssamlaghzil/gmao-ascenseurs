@@ -8,6 +8,7 @@ import { FileText } from 'lucide-react';
 import { Ascenseur, BureauEtudes, Client, ControleCTQ, StatutControleCTQ, Technicien } from '@/domain/types';
 import { StatutControleCTQBadge } from '@/components/StatusBadges';
 import { formatDate } from '@/lib/utils';
+import { LienClient, LienTechnicien } from '@/components/Liens';
 
 const LIBELLE_STATUT_CONTROLE_CTQ: Record<StatutControleCTQ, string> = {
   [StatutControleCTQ.PLANIFIE]: 'Planifié',
@@ -42,11 +43,11 @@ export default function InformationsControle({ controle, ascenseur, client, bure
           </div>
           {ascenseur ? (
             <p className="text-sm text-gray-600 mt-1">
-              <Link href={`/parc/${ascenseur.id}`} className="text-blue-600 hover:underline">
+              <Link href={`/appareils/${ascenseur.id}`} className="text-blue-600 hover:underline">
                 {ascenseur.code}
               </Link>
               {' — '}
-              {ascenseur.adresseComplete}, {ascenseur.ville}
+              {ascenseur.adresseComplete}
             </p>
           ) : (
             <p className="text-sm text-gray-400 mt-1">Appareil introuvable ({controle.appareilId})</p>
@@ -58,7 +59,15 @@ export default function InformationsControle({ controle, ascenseur, client, bure
           )}
         </div>
         <div className="text-sm text-gray-600 text-right">
-          <p>{client?.raisonSociale ?? 'Client inconnu'}</p>
+          <p>
+            {client ? (
+              <LienClient id={client.id} ton="sobre">
+                {client.raisonSociale}
+              </LienClient>
+            ) : (
+              'Client inconnu'
+            )}
+          </p>
           <p className="text-gray-400">{bureauEtudes?.nom ?? 'Bureau d’études inconnu'}</p>
         </div>
       </div>
@@ -80,7 +89,15 @@ export default function InformationsControle({ controle, ascenseur, client, bure
         </div>
         <div>
           <dt className="text-xs font-medium text-gray-500 uppercase">Technicien référent</dt>
-          <dd className="text-gray-900 mt-0.5">{technicien?.nomComplet ?? '—'}</dd>
+          <dd className="text-gray-900 mt-0.5">
+            {technicien ? (
+              <LienTechnicien id={technicien.id} ton="sobre">
+                {technicien.nomComplet}
+              </LienTechnicien>
+            ) : (
+              '—'
+            )}
+          </dd>
         </div>
         {bureauEtudes?.agrement && (
           <div>

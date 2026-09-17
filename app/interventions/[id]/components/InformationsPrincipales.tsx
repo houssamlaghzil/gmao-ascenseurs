@@ -9,6 +9,7 @@ import { Ascenseur, Client, Contrat, Intervention, NiveauSla, SourceTicket, Tech
 import StatusBadge from '@/components/StatusBadge';
 import { LIBELLE_MOTIF_INTERVENTION } from '@/lib/derived/libelles-parc';
 import { LIBELLE_NIVEAU_URGENCE, LIBELLE_SOURCE_TICKET } from '@/lib/derived/libelles-interventions';
+import { LienClient, LienContrat, LienTechnicien } from '@/components/Liens';
 
 const LIBELLE_NIVEAU_SLA: Record<NiveauSla, string> = {
   [NiveauSla.STANDARD]: 'Standard',
@@ -49,17 +50,34 @@ export default function InformationsPrincipales({
       <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Champ label="Appareil">
           {ascenseur ? (
-            <Link href={`/parc/${ascenseur.id}`} className="font-medium text-blue-600 hover:underline">
+            <Link href={`/appareils/${ascenseur.id}`} className="font-medium text-blue-600 hover:underline">
               {ascenseur.code}
             </Link>
           ) : (
             '—'
           )}
         </Champ>
-        <Champ label="Adresse">{ascenseur ? `${ascenseur.adresseComplete}, ${ascenseur.ville}` : '—'}</Champ>
-        <Champ label="Client">{client?.raisonSociale ?? '—'}</Champ>
+        <Champ label="Adresse">{ascenseur ? `${ascenseur.adresseComplete}` : '—'}</Champ>
+        <Champ label="Client">
+          {client ? (
+            <LienClient id={client.id} ton="sobre">
+              {client.raisonSociale}
+            </LienClient>
+          ) : (
+            '—'
+          )}
+        </Champ>
         <Champ label="Contrat">
-          {contrat ? `${contrat.numero} · ${LIBELLE_NIVEAU_SLA[contrat.niveauSla]}` : '—'}
+          {contrat ? (
+            <>
+              <LienContrat id={contrat.id} ton="sobre">
+                {contrat.numero}
+              </LienContrat>{' '}
+              · {LIBELLE_NIVEAU_SLA[contrat.niveauSla]}
+            </>
+          ) : (
+            '—'
+          )}
         </Champ>
         <Champ label="Motif">
           {LIBELLE_MOTIF_INTERVENTION[intervention.motif]}
@@ -67,7 +85,15 @@ export default function InformationsPrincipales({
         </Champ>
         <Champ label="Source">{sourcePremierTicket ? LIBELLE_SOURCE_TICKET[sourcePremierTicket] : '—'}</Champ>
         <Champ label="Niveau d'urgence">{LIBELLE_NIVEAU_URGENCE[intervention.niveauUrgence]}</Champ>
-        <Champ label="Technicien affecté">{technicien?.nomComplet ?? 'Non affecté'}</Champ>
+        <Champ label="Technicien affecté">
+          {technicien ? (
+            <LienTechnicien id={technicien.id} ton="sobre">
+              {technicien.nomComplet}
+            </LienTechnicien>
+          ) : (
+            'Non affecté'
+          )}
+        </Champ>
         <Champ label="État initial de l'appareil">
           {intervention.accesRefuse ? (
             <span className="text-gray-500">Accès refusé{intervention.motifAccesRefuse ? ` — ${intervention.motifAccesRefuse}` : ''}</span>

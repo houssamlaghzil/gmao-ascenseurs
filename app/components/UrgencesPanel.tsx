@@ -8,10 +8,33 @@ import { ComponentType } from 'react';
 import Card from '@/components/Card';
 import { formatDistanceToNow } from '@/lib/utils';
 import { GroupeUrgence, TypeUrgence } from '@/lib/derived/dashboard';
+import { lienAppareil } from '@/lib/derived/explorer';
 import { AlertOctagon, Clock, TimerOff, AlertTriangle, PlugZap, CheckCircle2 } from 'lucide-react';
 
 interface UrgencesPanelProps {
   groupes: GroupeUrgence[];
+}
+
+/**
+ * Destination naturelle d'un item d'urgence, déterminée par la nature du
+ * groupe plutôt que par `item.href` : dans les trois groupes issus des
+ * interventions, `item.id` porte l'identifiant réel de l'intervention (le
+ * titre affiché est d'ailleurs « Intervention <numéro> »), donc sa fiche
+ * `/interventions/<id>` — pas la fiche appareil. Le groupe « Appareils à
+ * l'arrêt » porte lui l'identifiant de l'appareil. Les anomalies API
+ * n'ayant pas de fiche dédiée, elles renvoient vers l'écran Intégrations.
+ */
+function lienUrgence(type: TypeUrgence, itemId: string): string {
+  switch (type) {
+    case TypeUrgence.PERSONNE_BLOQUEE:
+    case TypeUrgence.NON_PRIS_EN_CHARGE:
+    case TypeUrgence.SLA_BIENTOT_DEPASSE:
+      return `/interventions/${itemId}`;
+    case TypeUrgence.APPAREIL_A_L_ARRET:
+      return lienAppareil(itemId);
+    case TypeUrgence.ANOMALIE_API:
+      return '/integrations';
+  }
 }
 
 const ICONE: Record<TypeUrgence, ComponentType<{ className?: string }>> = {
@@ -60,26 +83,18 @@ export default function UrgencesPanel({ groupes }: UrgencesPanelProps) {
                 </span>
               </div>
               <ul className="space-y-2">
-                {groupe.items.map((item) => {
-                  const contenu = (
-                    <>
+                {groupe.items.map((item) => (
+                  <li key={item.id}>
+                    <Link
+                      href={lienUrgence(groupe.type, item.id)}
+                      className="block bg-white rounded-md border border-gray-200 px-3 py-2 transition-all hover:border-indigo-300 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                    >
                       <p className="text-sm font-medium text-gray-900 truncate">{item.titre}</p>
                       <p className="text-xs text-gray-600 truncate">{item.detail}</p>
                       <p className="text-xs text-gray-400 mt-0.5">{formatDistanceToNow(new Date(item.dateHeure))}</p>
-                    </>
-                  );
-                  return (
-                    <li key={item.id} className="bg-white rounded-md border border-gray-200 px-3 py-2">
-                      {item.href ? (
-                        <Link href={item.href} className="hover:underline block">
-                          {contenu}
-                        </Link>
-                      ) : (
-                        contenu
-                      )}
-                    </li>
-                  );
-                })}
+                    </Link>
+                  </li>
+                ))}
               </ul>
               {groupe.total > groupe.items.length && (
                 <p className={`text-xs mt-2 ${tone.text}`}>+ {groupe.total - groupe.items.length} autre(s)</p>

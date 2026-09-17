@@ -11,6 +11,7 @@ import { formatDate } from '@/lib/utils';
 import { LIBELLE_MOTIF_INTERVENTION } from '@/lib/derived/libelles-parc';
 import { LIBELLE_SOURCE_TICKET } from '@/lib/derived/libelles-interventions';
 import type { LigneInterventionListe } from '@/lib/derived/interventions-liste';
+import { LienAppareil, LienClient, LienTechnicien } from '@/components/Liens';
 
 function celluleDate(iso?: string): string {
   return iso ? formatDate(new Date(iso)) : '—';
@@ -62,9 +63,19 @@ export default function TableauInterventions({ lignes }: { lignes: LigneInterven
                   <div className="text-xs text-gray-400 mt-0.5">{ligne.nombreTickets} signalements</div>
                 )}
               </td>
-              <td className="px-4 py-3 whitespace-nowrap">{ligne.appareilCode}</td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                <LienAppareil ascenseurId={ligne.ascenseurId} ton="sobre">
+                  {ligne.appareilCode}
+                </LienAppareil>
+              </td>
               <td className="px-4 py-3 max-w-[180px] truncate" title={ligne.clientNom}>
-                {ligne.clientNom}
+                {ligne.clientId ? (
+                  <LienClient id={ligne.clientId} ton="sobre">
+                    {ligne.clientNom}
+                  </LienClient>
+                ) : (
+                  ligne.clientNom
+                )}
               </td>
               <td className="px-4 py-3 whitespace-nowrap">{LIBELLE_MOTIF_INTERVENTION[ligne.motif]}</td>
               <td className="px-4 py-3 whitespace-nowrap text-gray-600">
@@ -76,7 +87,15 @@ export default function TableauInterventions({ lignes }: { lignes: LigneInterven
               <td className="px-4 py-3 whitespace-nowrap">
                 <EtatSLABadge etat={ligne.sla.etat} />
               </td>
-              <td className="px-4 py-3 whitespace-nowrap">{ligne.technicienNom ?? '—'}</td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                {ligne.technicienId && ligne.technicienNom ? (
+                  <LienTechnicien id={ligne.technicienId} ton="sobre">
+                    {ligne.technicienNom}
+                  </LienTechnicien>
+                ) : (
+                  ligne.technicienNom ?? '—'
+                )}
+              </td>
               <td className="px-4 py-3 whitespace-nowrap">
                 <StatutInterventionBadge statut={ligne.statut} />
               </td>

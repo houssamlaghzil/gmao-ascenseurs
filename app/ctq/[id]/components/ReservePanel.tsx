@@ -12,16 +12,18 @@ import { estReserveEnRetard } from '@/domain/business-logic';
 import { GraviteReserveBadge, StatutReserveBadge } from '@/components/StatusBadges';
 import { formatDate } from '@/lib/utils';
 import { LIBELLE_TYPE_TRAITEMENT_RESERVE } from '@/lib/derived/libelles-ctq';
+import { LienTechnicien } from '@/components/Liens';
 
 interface ReservePanelProps {
   reserve: ReserveCTQ;
   photos: PhotoRapport[];
+  technicienId?: string;
   technicienNom?: string;
   traitementReference?: string;
   traitementHref?: string;
 }
 
-function LigneInfo({ label, valeur }: { label: string; valeur?: string }) {
+function LigneInfo({ label, valeur }: { label: string; valeur?: React.ReactNode }) {
   if (!valeur) return null;
   return (
     <div>
@@ -31,7 +33,7 @@ function LigneInfo({ label, valeur }: { label: string; valeur?: string }) {
   );
 }
 
-export default function ReservePanel({ reserve, photos, technicienNom, traitementReference, traitementHref }: ReservePanelProps) {
+export default function ReservePanel({ reserve, photos, technicienId, technicienNom, traitementReference, traitementHref }: ReservePanelProps) {
   const enRetard = estReserveEnRetard(reserve);
 
   return (
@@ -60,7 +62,18 @@ export default function ReservePanel({ reserve, photos, technicienNom, traitemen
         <LigneInfo label="Localisation" valeur={reserve.localisation} />
         <LigneInfo label="Constatée le" valeur={formatDate(new Date(reserve.dateConstat))} />
         <LigneInfo label="Échéance" valeur={reserve.dateEcheance ? formatDate(new Date(reserve.dateEcheance)) : undefined} />
-        <LigneInfo label="Technicien assigné" valeur={technicienNom} />
+        <LigneInfo
+          label="Technicien assigné"
+          valeur={
+            technicienId && technicienNom ? (
+              <LienTechnicien id={technicienId} ton="sobre">
+                {technicienNom}
+              </LienTechnicien>
+            ) : (
+              technicienNom
+            )
+          }
+        />
         <LigneInfo label="Planifiée le" valeur={reserve.datePlanification ? formatDate(new Date(reserve.datePlanification)) : undefined} />
         <LigneInfo label="Traitée le" valeur={reserve.dateTraitement ? formatDate(new Date(reserve.dateTraitement)) : undefined} />
         <LigneInfo label="Validée le" valeur={reserve.dateValidation ? formatDate(new Date(reserve.dateValidation)) : undefined} />
