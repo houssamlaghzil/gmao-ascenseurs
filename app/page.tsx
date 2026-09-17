@@ -23,6 +23,7 @@ import StatCard from '@/components/StatCard';
 import Card from '@/components/Card';
 import { LienDimension, LienTechnicien } from '@/components/Liens';
 import { DonutChart, GaugeChart, Heatmap } from '@/components/charts';
+import ZoneDefilante from '@/components/ZoneDefilante';
 import UrgencesPanel from './components/UrgencesPanel';
 import NotificationsPanel from './components/NotificationsPanel';
 import RisqueAscenseursPanel from './components/RisqueAscenseursPanel';
@@ -207,8 +208,25 @@ export default function TableauDeBordPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card title="Activité sur 90 jours" subtitle="Interventions créées et maintenances réalisées" className="lg:col-span-2">
-          <Heatmap data={activiteParJour} />
+        <Card
+          title="Activité du parc"
+          subtitle="3 mois écoulés (réalisé) · 3 mois à venir (planifié)"
+          className="lg:col-span-2"
+        >
+          {/*
+            La grille (~189 jours, 27 colonnes) dépasse toujours la largeur
+            d'une carte : ZoneDefilante prend le débordement à sa charge — sans
+            elle, Heatmap se contenterait de déborder du bloc silencieusement.
+            `couleurFondu` reprend le blanc de Card (voir components/Card.tsx)
+            pour que la trame se fonde dans le fond réel plutôt que de trancher
+            dessus. Centré au chargement sur la case « aujourd'hui » (contrat
+            `data-scroll-cible`, voir l'en-tête de Heatmap.tsx) : sur mobile,
+            où les 27 colonnes ne tiennent jamais, on atterrit directement sur
+            le présent plutôt que sur le premier jour du passé.
+          */}
+          <ZoneDefilante couleurFondu="#ffffff" centrerSur='[data-scroll-cible="true"]'>
+            <Heatmap data={activiteParJour} className="px-0.5 pb-1" />
+          </ZoneDefilante>
         </Card>
         <Card title="Charge par technicien" subtitle="Interventions actives + maintenances à venir">
           <ChargeTechniciensList items={chargeTechniciens} />

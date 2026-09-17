@@ -1,0 +1,153 @@
+/* ==========================================================================
+   ZoneDefilante — défilement horizontal sans barre, fondu en pointillé
+   --------------------------------------------------------------------------
+   Primitive du design system : un conteneur qui défile latéralement sans
+   aucune barre visible, et qui signale le contenu hors-champ par une trame
+   de points (demi-ton) qui s'estompe vers l'intérieur.
+
+   Le pilotage de l'apparition (quel côté, quand) vit dans ZoneDefilante.tsx ;
+   ce fichier ne décrit que l'aspect. Les deux calques sont toujours présents
+   dans le DOM : on ne fait varier que leur opacité, pour que l'apparition et
+   la disparition soient des transitions et non des sauts.
+   ========================================================================== */
+
+.racine {
+  position: relative;
+  /* Les calques de fondu sont posés en absolu par rapport à cette racine :
+     ils ne doivent jamais déborder sur les blocs voisins. */
+  isolation: isolate;
+}
+
+.zone {
+  overflow-x: auto;
+  /* `overflow-x: auto` force de toute façon l'axe vertical à ne plus être
+     `visible` : autant le fixer nous-mêmes plutôt que de laisser le navigateur
+     faire apparaître une barre verticale parasite. Conséquence à connaître :
+     un contenu qui déborde vers le haut ou le bas (infobulle, menu) sera
+     rogné — il doit être rendu en dehors de la zone, via un portail. */
+  overflow-y: hidden;
+  /* Le geste latéral reste dans la zone : il ne déclenche ni la navigation
+     « retour » du navigateur (balayage depuis le bord), ni le défilement
+     vertical de la page une fois la butée atteinte. */
+  overscroll-behavior-x: contain;
+  /* Inertie native sur les anciens iOS ; sans effet, et sans coût, ailleurs. */
+  -webkit-overflow-scrolling: touch;
+
+  /* Aucune barre visible : c'est le fondu pointillé qui joue ce rôle. */
+  scrollbar-width: none;    /* Firefox */
+  -ms-overflow-style: none; /* anciens Edge / IE */
+}
+
+.zone::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge */
+}
+
+/* La zone devient un arrêt de tabulation quand — et seulement quand — elle
+   déborde (voir `tabIndex` dans le composant) : sans cela un contenu non
+   focalisable, comme une heatmap de <div>, serait inatteignable au clavier. */
+.zone:focus-visible {
+  outline: 2px solid #0ea5e9; /* primary-500 */
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+/* --------------------------------------------------------------------------
+   Le fondu en pointillé
+   --------------------------------------------------------------------------
+   Deux couches superposées, et c'est leur combinaison qui fait l'effet :
+
+   1. `background-image: radial-gradient(circle, <couleur> 1px, transparent 1px)`
+      répété tous les 7px dessine une trame régulière de pastilles de la
+      couleur du fond parent. Posée sur le contenu, elle le « grignote » :
+      le texte reste lisible entre les points, mais perd en netteté.
+
+   2. `mask-image: linear-gradient(...)` ne touche pas aux points eux-mêmes,
+      il fait varier l'opacité de TOUTE la couche : opaque contre le bord réel
+      (là où le contenu est tranché), transparente ~5 % plus loin (là où le
+      contenu redevient pleinement lisible).
+
+   Pourquoi pas un simple dégradé d'opacité (`linear-gradient(transparent,
+   #fff)`) ? Parce qu'il produit un voile continu, qui se lit comme « cette
+   zone est désactivée ». La trame, elle, reste ajourée : l'œil continue de
+   percevoir du contenu à travers les trous, ce qui se lit comme « ça
+   continue derrière ». C'est exactement le message voulu.
+
+   Pourquoi le masque plutôt que faire varier la trame elle-même (points de
+   plus en plus petits/espacés) ? Parce qu'un `background-size` ne peut pas
+   être interpolé le long d'un axe : il faudrait empiler une dizaine de
+   calques de densités différentes. Le masque obtient le même dégradé de
+   densité perçue avec un seul calque et zéro coût de rendu (le masque est
+   composité sur le GPU).
+   -------------------------------------------------------------------------- */
+
+.fondu {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* ~5 % de la largeur, comme demandé, mais borné : à 5 % d'une carte de
+     320px le fondu ne ferait que 16px, soit deux points — trop peu pour se
+     lire comme une trame. Et au-delà de 56px il mangerait le contenu. */
+  width: clamp(1.75rem, 5%, 3.5rem);
+  /* Le doigt et la souris traversent le calque : il ne doit jamais intercepter
+     le geste de défilement qu'il annonce. */
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms var(--courbe-sortie, cubic-bezier(0.22, 1, 0.36, 1));
+
+  background-image: radial-gradient(
+    circle,
+    var(--zone-defilante-point, #ffffff) 1px,
+    transparent 1px
+  );
+  background-size: 7px 7px;
+  background-position: center;
+
+  /* Un masque en dégradé n'a pas d'échelle propre : sans ces deux réglages,
+     Safari le répète au lieu de l'étirer sur toute la surface du calque. */
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+.fondu[data-visible='true'] {
+  opacity: 1;
+}
+
+/* Bord gauche : trame dense contre le bord, effacée vers la droite. */
+.fonduGauche {
+  left: 0;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    rgba(0, 0, 0, 0.82) 28%,
+    rgba(0, 0, 0, 0.34) 62%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    rgba(0, 0, 0, 0.82) 28%,
+    rgba(0, 0, 0, 0.34) 62%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+/* Bord droit : le même dégradé, miroir. */
+.fonduDroite {
+  right: 0;
+  -webkit-mask-image: linear-gradient(
+    to left,
+    #000 0%,
+    rgba(0, 0, 0, 0.82) 28%,
+    rgba(0, 0, 0, 0.34) 62%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  mask-image: linear-gradient(
+    to left,
+    #000 0%,
+    rgba(0, 0, 0, 0.82) 28%,
+    rgba(0, 0, 0, 0.34) 62%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}

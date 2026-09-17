@@ -114,44 +114,158 @@ export function getKpisTableauDeBord(maintenant: Date = new Date()): KpisTableau
 // 3.2 — Graphiques et tendances
 // ============================================================================
 
+/** Position d'un jour vis-à-vis d'aujourd'hui — pilote la teinte du Heatmap. */
+export type TemporaliteJour = 'passe' | 'aujourdhui' | 'futur';
+
 export interface JourActivite {
-  date: string; // ISO date (jour)
-  count: number;
-  pannes: number; // interventions créées ce jour-là
-  reparations: number; // maintenances réalisées ce jour-là
+  date: string; // ISO yyyy-mm-dd, jour civil local
+  count: number; // passé/aujourd'hui : pannes + réparations — futur : maintenances prévues
+  pannes: number; // interventions créées ce jour-là (0 dans le futur : une panne ne se prévoit pas)
+  reparations: number; // maintenances réalisées ce jour-là (0 dans le futur)
+  planifiees: number; // maintenances prévues et pas encore faites (0 dans le passé et aujourd'hui)
+  categoriesPlanifiees: CategorieMaintenance[]; // catégories distinctes des maintenances prévues
+  temporalite: TemporaliteJour;
+  horsPlage: boolean; // case de complément de grille : neutre, ne compte rien, non survolable
 }
 
-function toDayKey(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 10);
+/**
+ * Clé de jour **civil local**, jamais UTC : un événement du 17 à 23 h à Paris
+ * doit tomber sur la case du 17. L'ancienne `toDayKey` passait par
+ * `.toISOString()`, qui bascule en UTC — avec un fuseau en avance sur UTC
+ * (Paris), toute date proche de minuit reculait d'un jour ; la grille du
+ * Heatmap et les tendances 7 jours en souffraient toutes les deux.
+ */
+function cleJourLocale(date: Date): string {
+  const mois = String(date.getMonth() + 1).padStart(2, '0');
+  const jour = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${mois}-${jour}`;
 }
 
-/** Historique d'activité jour par jour (par défaut 90 jours) — alimente le Heatmap. */
-export function getActiviteParJour(nbJours = 90): JourActivite[] {
-  const panneParJour = new Map<string, number>();
-  for (const i of getAllInterventions()) {
-    const key = toDayKey(i.dateCreation);
-    panneParJour.set(key, (panneParJour.get(key) ?? 0) + 1);
-  }
-  const reparationParJour = new Map<string, number>();
-  for (const m of getAllMaintenances()) {
-    if (m.statut === StatutMaintenance.REALISEE && m.dateRealisee) {
-      const key = toDayKey(m.dateRealisee);
-      reparationParJour.set(key, (reparationParJour.get(key) ?? 0) + 1);
-    }
-  }
+/**
+ * Décale de `deltaMois` mois en bornant le quantième : le 31 mai moins 3 mois
+ * donne le 28/29 février et non le 2 mars (débordement natif de `setMonth`).
+ */
+function decalerMois(date: Date, deltaMois: number): Date {
+  const cible = new Date(date.getFullYear(), date.getMonth() + deltaMois, 1);
+  const dernierJourDuMois = new Date(cible.getFullYear(), cible.getMonth() + 1, 0).getDate();
+  cible.setDate(Math.min(date.getDate(), dernierJourDuMois));
+  return cible;
+}
 
+/** Amplitude de la vue mixte, en mois civils de part et d'autre d'aujourd'hui. */
+const MOIS_AFFICHES = 3;
+
+/**
+ * Calendrier mixte réalisé + prévisionnel jour par jour — alimente le Heatmap.
+ *
+ * Trois mois écoulés, aujourd'hui, trois mois à venir : la plage est fixée par
+ * la maquette validée, d'où l'ancien paramètre `nbJours` devenu sans effet
+ * (conservé uniquement pour ne pas casser les appelants existants).
+ *
+ * Le tableau retourné est déjà **aligné sur des semaines civiles** : il démarre
+ * un lundi, finit un dimanche, et sa longueur est un multiple de 7. Le composant
+ * n'a donc qu'à le découper par paquets de 7 pour obtenir des colonnes dont la
+ * première ligne est bien un lundi — l'ancienne grille découpait à partir d'un
+ * jour quelconque (lignes fausses) et s'arrêtait sur une colonne tronquée.
+ * Les jours ajoutés pour compléter la première et la dernière semaine portent
+ * `horsPlage: true` : ils occupent la grille mais ne comptent rien.
+ *
+ * Le futur ne contient que des maintenances encore à faire : ni REALISEE (déjà
+ * comptée dans le passé), ni ANNULEE (reportée définitivement, l'afficher comme
+ * prévue serait un mensonge), et évidemment aucune panne — une panne ne se
+ * prévoit pas.
+ */
+export function getActiviteParJour(_nbJoursIgnore?: number): JourActivite[] {
   const aujourdhui = new Date();
   aujourdhui.setHours(0, 0, 0, 0);
+  const cleAujourdhui = cleJourLocale(aujourdhui);
+
+  const panneParJour = new Map<string, number>();
+  for (const i of getAllInterventions()) {
+    const key = cleJourLocale(new Date(i.dateCreation));
+    if (key > cleAujourdhui) continue; // garde-fou : rien ne se crée dans le futur
+    panneParJour.set(key, (panneParJour.get(key) ?? 0) + 1);
+  }
+
+  const reparationParJour = new Map<string, number>();
+  const planifieeParJour = new Map<string, number>();
+  const categoriesParJour = new Map<string, Set<CategorieMaintenance>>();
+  for (const m of getAllMaintenances()) {
+    if (m.statut === StatutMaintenance.REALISEE) {
+      if (!m.dateRealisee) continue;
+      const key = cleJourLocale(new Date(m.dateRealisee));
+      reparationParJour.set(key, (reparationParJour.get(key) ?? 0) + 1);
+      continue;
+    }
+    if (m.statut === StatutMaintenance.ANNULEE) continue;
+    const key = cleJourLocale(new Date(m.datePrevue));
+    if (key <= cleAujourdhui) continue; // le prévisionnel commence demain
+    planifieeParJour.set(key, (planifieeParJour.get(key) ?? 0) + 1);
+    const categories = categoriesParJour.get(key) ?? new Set<CategorieMaintenance>();
+    for (const categorie of m.categories) categories.add(categorie);
+    categoriesParJour.set(key, categories);
+  }
+
+  const debutPlage = decalerMois(aujourdhui, -MOIS_AFFICHES);
+  const finPlage = decalerMois(aujourdhui, MOIS_AFFICHES);
+
+  // Alignement calendaire : reculer jusqu'au lundi qui précède le début de la
+  // plage, avancer jusqu'au dimanche qui suit sa fin. `getDay()` vaut 0 le
+  // dimanche, d'où le +6 % 7 pour ramener la semaine sur un début lundi.
+  const debutGrille = new Date(debutPlage);
+  debutGrille.setDate(debutGrille.getDate() - ((debutGrille.getDay() + 6) % 7));
+  const finGrille = new Date(finPlage);
+  finGrille.setDate(finGrille.getDate() + ((7 - finGrille.getDay()) % 7));
 
   const jours: JourActivite[] = [];
-  for (let n = nbJours - 1; n >= 0; n--) {
-    const jour = new Date(aujourdhui);
-    jour.setDate(jour.getDate() - n);
-    const key = jour.toISOString().slice(0, 10);
-    const pannes = panneParJour.get(key) ?? 0;
-    const reparations = reparationParJour.get(key) ?? 0;
-    jours.push({ date: key, count: pannes + reparations, pannes, reparations });
+  const curseur = new Date(debutGrille);
+  while (curseur.getTime() <= finGrille.getTime()) {
+    const date = cleJourLocale(curseur);
+    const horsPlage = curseur.getTime() < debutPlage.getTime() || curseur.getTime() > finPlage.getTime();
+    const temporalite: TemporaliteJour =
+      date === cleAujourdhui ? 'aujourdhui' : date < cleAujourdhui ? 'passe' : 'futur';
+
+    if (horsPlage) {
+      jours.push({
+        date,
+        count: 0,
+        pannes: 0,
+        reparations: 0,
+        planifiees: 0,
+        categoriesPlanifiees: [],
+        temporalite,
+        horsPlage: true,
+      });
+    } else if (temporalite === 'futur') {
+      const planifiees = planifieeParJour.get(date) ?? 0;
+      jours.push({
+        date,
+        count: planifiees,
+        pannes: 0,
+        reparations: 0,
+        planifiees,
+        categoriesPlanifiees: [...(categoriesParJour.get(date) ?? [])],
+        temporalite,
+        horsPlage: false,
+      });
+    } else {
+      const pannes = panneParJour.get(date) ?? 0;
+      const reparations = reparationParJour.get(date) ?? 0;
+      jours.push({
+        date,
+        count: pannes + reparations,
+        pannes,
+        reparations,
+        planifiees: 0,
+        categoriesPlanifiees: [],
+        temporalite,
+        horsPlage: false,
+      });
+    }
+
+    curseur.setDate(curseur.getDate() + 1);
   }
+
   return jours;
 }
 
@@ -304,7 +418,7 @@ function tendance7jPourAscenseur(ascenseurId: string, interventions: Interventio
   const parJour = new Map<string, number>();
   for (const i of interventions) {
     if (i.ascenseurId !== ascenseurId) continue;
-    const key = toDayKey(i.dateCreation);
+    const key = cleJourLocale(new Date(i.dateCreation));
     parJour.set(key, (parJour.get(key) ?? 0) + 1);
   }
   const aujourdhui = new Date();
@@ -313,7 +427,7 @@ function tendance7jPourAscenseur(ascenseurId: string, interventions: Interventio
   for (let n = 6; n >= 0; n--) {
     const jour = new Date(aujourdhui);
     jour.setDate(jour.getDate() - n);
-    jours.push(parJour.get(jour.toISOString().slice(0, 10)) ?? 0);
+    jours.push(parJour.get(cleJourLocale(jour)) ?? 0);
   }
   return jours;
 }
