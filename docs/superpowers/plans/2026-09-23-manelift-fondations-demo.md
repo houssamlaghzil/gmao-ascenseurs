@@ -15,7 +15,7 @@
 - `domain/` reste pur : aucun import de `data/store` ni de `next/*` dans `domain/business-logic.ts` ou `domain/risk-scoring.ts`. Toute dépendance au temps y passe par un paramètre `maintenant: Date` optionnel, jamais par un import direct de l'horloge de démo.
 - Aucune fonction exportée de `lib/derived/*.ts` ne doit changer de comportement observable pour les mêmes entrées et le même instant — seule la *source* de « l'heure actuelle » change (de `new Date()` codé en dur vers `getDateDemo()`), pas la logique.
 - Le magasin de données (`data/store.ts`) est global au process Node, partagé par tous les visiteurs de la démo publique — pas de session par navigateur. `reinitialiserDonneesDemo()` remet tout le monde à zéro simultanément ; c'est un choix assumé (cahier des charges section 4.1 : « L'agent peut employer le mécanisme de persistance déjà utilisé par le projet »), pas un oubli.
-- Suite de tests existante doit rester intégralement verte (`npm test`) sans modification d'un test existant, sauf ajout strictement additif si un mock doit être étendu.
+- Suite de tests existante doit rester intégralement verte (`npx vitest run` — **jamais** `npm test` seul : le script `test` de `package.json` est `vitest` sans `run`, qui démarre le mode watch interactif et ne se termine jamais tout seul en session non interactive) sans modification d'un test existant, sauf ajout strictement additif si un mock doit être étendu.
 - `npm run lint` et `npx tsc --noEmit` doivent rester sans erreur après chaque tâche.
 - Les composants purement présentatifs de ce plan (bandeau, bouton de bascule) suivent la convention déjà en vigueur dans ce dépôt : `Navigation.tsx`, `AppShell.tsx`, `Card.tsx` n'ont aucun test unitaire (`vitest.config.ts` tourne en environnement `node`, sans DOM), donc ces tâches ne créent pas de test — une vérification manuelle (`npm run dev`) suffit, en plus du lint/typecheck.
 - Attribution des commits : `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
@@ -475,7 +475,7 @@ grep -rn "new Date()" lib/derived domain app --include=*.tsx --include=*.ts | gr
 
 Expected : la seule occurrence restante en dehors de `domain/` doit être celle des valeurs par défaut volontairement laissées (aucune, après le Step 4 — toutes les valeurs par défaut de `lib/derived` ont été basculées). Dans `domain/`, seules les lignes de `risk-scoring.ts` avec `maintenant: Date = new Date()` (Step 1, défauts intentionnellement réels) et `domain/business-logic.ts:689` (`estReserveEnRetard`, Step 4) doivent apparaître.
 
-Run : `npm test`
+Run : `npx vitest run`
 Expected : tous les tests existants passent toujours (aucun test ne fixe une valeur d'horloge en dur qui dépendrait de l'ancien comportement — `getDateDemo()` renvoie `new Date()` exactement comme avant).
 
 Run : `npx tsc --noEmit && npm run lint`
@@ -940,7 +940,7 @@ EOF
 
 Run:
 ```bash
-npm test
+npx vitest run
 npx tsc --noEmit
 npm run lint
 npm run build
