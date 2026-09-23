@@ -58,6 +58,8 @@ Barre latérale à 11 sections : **Tableau de bord**, **Parc**, **Maintenances**
 Dashboard (KPI, urgences, activité récente, maintenance prédictive), Parc (liste filtrable/paginée + fiche appareil à 7 onglets), Maintenances (calendrier + vue prioritaire), Interventions (liste + détail avec chronologie, tickets regroupés, SLA, réattribution), Rapports (liste + détail + aperçu façon PDF, rapport journalier généré par IA), CTQ/Réserves, Planning (vue technicien + réaffectation par glisser-déposer) et Techniciens, Contrats, Intégrations, Administration, Cartographie (plan schématique SVG — aucune tuile cartographique externe), Centre de tâches asynchrones.
 
 ### Mobile (simulation)
+Accessible depuis la barre latérale Web via le bouton « Vue technicien (Android) », et inversement via « Retour à la vue Web » depuis le cadre téléphone.
+
 Sous `/mobile` : connexion (choix d'un technicien de démonstration), accueil, ma tournée, fiche appareil, recherche, démarrage d'intervention (accès / état initial), diagnostic progressif en 6 étapes, clôture (état, mode dégradé, compte-rendu, photos, signatures), rapport isolé, maintenance (checklist, test téléalarme), CTQ/missions, centre de synchronisation, et un indicateur PTI/DATI.
 
 Le technicien "connecté" est déterminé par un simple cookie posé depuis `/mobile/connexion` (aucune authentification réelle). Six comptes illustrent des scénarios figés rejouables à volonté : technicien par défaut, hors ligne, synchronisation en cours, PTI en réactivation, PTI en mode intégration tierce, réaffectation née hors ligne.
@@ -126,6 +128,7 @@ services:
 - **Cartographie schématique** : positions dérivées de la ville de chaque site (jitter déterministe), pas de vraies coordonnées ni de tuiles cartographiques.
 - **Dictée vocale et signature** simulées visuellement (pas de reconnaissance vocale ni de capture de tracé réelle).
 - **PTI/DATI** simulé (les deux options du cahier des charges sont représentées, sans intégration à un vrai service tiers).
+- **Horloge de démonstration et réinitialisation** : un bandeau global (« Maquette — données fictives et actions simulées ») permet de réinitialiser toutes les données à leur état initial. Le magasin de données étant global au process serveur (pas de session par visiteur), cette réinitialisation affecte immédiatement tous les visiteurs actuels de la démo publique.
 
 ## Scénario de démonstration conseillé
 
