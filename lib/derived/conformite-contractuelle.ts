@@ -342,9 +342,14 @@ function assemblerAppareil(
 }
 
 /**
- * Bilan d'un appareil à partir de SES maintenances — point d'entrée pur,
- * sans accès au store : c'est cette fonction que vérifient les tests
- * unitaires et que réutilise le calcul global ci-dessous.
+ * Bilan d'un appareil à partir de SES maintenances — son corps n'accède
+ * jamais au store : il ne travaille que sur ses paramètres. Seule la valeur
+ * par défaut de `maintenant` dépend de data/store (elle appelle l'horloge de
+ * démonstration `getDateDemo()`, importée de ce module), et uniquement quand
+ * l'appelant omet ce paramètre ; avec un `maintenant` explicite, la fonction
+ * est pure. C'est cette fonction que vérifient les tests unitaires (qui
+ * fournissent toujours `maintenant`), et le calcul global ci-dessous en
+ * réutilise les mêmes briques.
  */
 export function calculerConformiteAppareil(
   ascenseur: Ascenseur,

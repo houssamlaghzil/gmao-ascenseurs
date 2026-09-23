@@ -272,6 +272,11 @@ export function getVersionDonnees(): number {
 
 function invaliderIndexes(): void {
   magasin.versionIndexes++;
+  // La chronologie d'une intervention agrège l'intervention, ses tickets, ses
+  // réaffectations et ses rapports : n'importe quelle mutation peut la rendre
+  // obsolète. Vidage global volontairement simple (échelle de la maquette)
+  // plutôt qu'une invalidation ciblée par identifiant.
+  magasin.cacheEtapesIntervention.clear();
   try {
     revalidatePath('/', 'layout');
   } catch {
@@ -1194,16 +1199,45 @@ export function reinitialiserDonneesDemo(): void {
   invaliderIndexes();
 }
 
-/** Vrai si l'intervention n'a franchi aucune étape après sa création (ni affectation, ni prise en charge, ni arrivée, ni fin, ni validation, ni clôture). */
-function aucunJalonApresCreation(intervention: Intervention): boolean {
+/**
+ * Jalons du cycle de vie d'une intervention, dans l'ordre chronologique de
+ * l'interface `Intervention` (domain/types.ts). `dureeInterventionMinutes`
+ * n'en fait pas partie : c'est une durée, pas un horodatage.
+ */
+const JALONS_INTERVENTION = [
+  'dateCreation',
+  'dateAffectation',
+  'datePriseEnCharge',
+  'dateArriveeSite',
+  'dateTerminee',
+  'dateValidation',
+  'dateCloture',
+] as const satisfies ReadonlyArray<keyof Intervention>;
+
+/**
+ * Vrai si l'intervention est une urgence « personne bloquée » encore ouverte
+ * que le recalage de fraîcheur peut rajeunir : motif PERSONNE_BLOQUEE, non
+ * clôturée, et sans aucune Reaffectation ni aucun Rapport rattaché. Une
+ * réaffectation porte un horodatage réel et immuable (domain/types.ts), et un
+ * rapport marque une intervention trop avancée pour réécrire son historique :
+ * ces interventions gardent leurs dates d'origine.
+ */
+function estRafraichissable(intervention: Intervention, interventionsAvecHistoriqueFige: ReadonlySet<string>): boolean {
   return (
-    !intervention.dateAffectation &&
-    !intervention.datePriseEnCharge &&
-    !intervention.dateArriveeSite &&
-    !intervention.dateTerminee &&
-    !intervention.dateValidation &&
-    !intervention.dateCloture
+    intervention.motif === MotifIntervention.PERSONNE_BLOQUEE &&
+    intervention.statut !== StatutIntervention.CLOTURE &&
+    !interventionsAvecHistoriqueFige.has(intervention.id)
   );
+}
+
+/** Horodatage (ms) du jalon le plus récent effectivement renseigné — au pire `dateCreation`, toujours présente. */
+function dernierJalonMs(intervention: Intervention): number {
+  let dernierMs = new Date(intervention.dateCreation).getTime();
+  for (const champ of JALONS_INTERVENTION) {
+    const valeur = intervention[champ];
+    if (valeur) dernierMs = Math.max(dernierMs, new Date(valeur).getTime());
+  }
+  return dernierMs;
 }
 
 function decalerDateISO(dateISO: string, decalageMs: number): string {
@@ -1211,19 +1245,34 @@ function decalerDateISO(dateISO: string, decalageMs: number): string {
 }
 
 /**
+ * Horodatages de fait accompli d'une réserve CTQ, dans l'ordre de son cycle
+ * de vie (domain/types.ts). `dateEcheance` n'en fait pas partie : c'est une
+ * limite, qui peut légitimement tomber dans le futur.
+ */
+const HORODATAGES_RESERVE = [
+  'dateConstat',
+  'datePlanification',
+  'dateTraitement',
+  'dateValidation',
+] as const satisfies ReadonlyArray<keyof ReserveCTQ>;
+
+/**
  * Recale dans le temps les données sensibles à la fraîcheur (cahier des
  * charges maquette, section 4.3) : sans ce recalage, un process resté
  * plusieurs jours en vie affiche des urgences "personne bloquée" vieilles de
- * plusieurs semaines, ou des événements de réserve datés dans le futur.
+ * plusieurs semaines, ou des réserves (événements, dates de traitement et de
+ * validation) datées dans le futur.
  * Exportée pour être testée isolément (voir data/store.test.ts).
  *
- * Seules les urgences "personne bloquée" encore intactes (aucun jalon après
- * la création, soit les interventions NOUVEAU du jeu de données) sont
- * rajeunies : déplacer la création d'une intervention déjà affectée, prise
- * en charge ou terminée la placerait après ses propres étapes suivantes.
- * Chaque intervention rajeunie est décalée d'un seul bloc — création,
- * fenêtre SLA et tickets rattachés — pour que l'échéance SLA reste après la
- * création et que le 1er ticket reste le point de départ du décompte.
+ * Chaque urgence rafraîchissable (voir `estRafraichissable`) est décalée d'un
+ * seul bloc : un unique décalage, calculé pour amener son jalon le PLUS
+ * RÉCENT (affectation, prise en charge, arrivée…, à défaut la création) à
+ * quelques minutes de maintenant, est appliqué à tous ses horodatages
+ * renseignés — jalons, fenêtre SLA — et à ses tickets rattachés. Les écarts
+ * entre jalons sont donc conservés à l'identique (aucun jalon ne passe avant
+ * un jalon antérieur), et comme le plus récent atterrit dans le passé, aucun
+ * jalon ne se retrouve dans le futur. Seule l'échéance SLA, qui est une
+ * limite et non un fait accompli, peut légitimement rester à venir.
  */
 export function rafraichirFraicheurScenarios(): void {
   const maintenant = getDateDemo();
@@ -1231,18 +1280,27 @@ export function rafraichirFraicheurScenarios(): void {
   const decalageParIntervention = new Map<string, number>();
   let rang = 0;
 
+  const interventionsAvecHistoriqueFige = new Set<string>([
+    ...magasin.reaffectations.filter((r) => r.cibleType === TypeCiblePlanning.INTERVENTION).map((r) => r.cibleId),
+    ...magasin.rapports.flatMap((r) => (r.interventionId ? [r.interventionId] : [])),
+  ]);
+
   magasin.interventions = magasin.interventions.map((intervention) => {
-    if (intervention.motif !== MotifIntervention.PERSONNE_BLOQUEE) return intervention;
-    if (!aucunJalonApresCreation(intervention)) return intervention;
+    if (!estRafraichissable(intervention, interventionsAvecHistoriqueFige)) return intervention;
     const ancienneteMinutes = 5 + ((rang++ * 7) % 40); // étalées entre 5 et 44 minutes, de façon déterministe
-    const decalageMs = maintenantMs - ancienneteMinutes * 60_000 - new Date(intervention.dateCreation).getTime();
+    const decalageMs = maintenantMs - ancienneteMinutes * 60_000 - dernierJalonMs(intervention);
     decalageParIntervention.set(intervention.id, decalageMs);
-    return {
+    const decalee: Intervention = {
       ...intervention,
-      dateCreation: decalerDateISO(intervention.dateCreation, decalageMs),
       dateDebutDecompteSLA: decalerDateISO(intervention.dateDebutDecompteSLA, decalageMs),
       dateLimiteSLA: decalerDateISO(intervention.dateLimiteSLA, decalageMs),
     };
+    // Seuls les jalons déjà renseignés sont décalés : un jalon absent reste absent.
+    for (const champ of JALONS_INTERVENTION) {
+      const valeur = intervention[champ];
+      if (valeur) decalee[champ] = decalerDateISO(valeur, decalageMs);
+    }
+    return decalee;
   });
 
   // Un ticket rattaché plus tard (2e signalement) ne doit pas se retrouver dans le futur après décalage.
@@ -1263,4 +1321,22 @@ export function rafraichirFraicheurScenarios(): void {
       ? { ...evenement, dateHeure: maintenant.toISOString() }
       : evenement
   );
+
+  // Même plafonnement pour les dates portées par la réserve elle-même, appliqué
+  // à TOUS ses horodatages de fait accompli et pas à la seule validation :
+  // min(date, maintenant) étant monotone, il ne peut inverser aucun ordre, alors
+  // que plafonner la validation seule la placerait avant un traitement resté
+  // dans le futur (cas présent dans le jeu de données), en contradiction avec
+  // le journal d'événements déjà plafonné ci-dessus. Une date passée n'est
+  // jamais modifiée.
+  magasin.reservesCTQ = magasin.reservesCTQ.map((reserve) => {
+    const champsFuturs = HORODATAGES_RESERVE.filter((champ) => {
+      const valeur = reserve[champ];
+      return valeur !== undefined && new Date(valeur).getTime() > maintenantMs;
+    });
+    if (champsFuturs.length === 0) return reserve;
+    const plafonnee: ReserveCTQ = { ...reserve };
+    for (const champ of champsFuturs) plafonnee[champ] = maintenant.toISOString();
+    return plafonnee;
+  });
 }
