@@ -23,9 +23,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: gmao-ascenseurs:latest
-    container_name: gmao-ascenseurs
-    
+    # Pas de `image:`/`container_name:` fixes : plusieurs environnements
+    # (production, dev...) peuvent coexister sur le même hôte Docker.
+    # Compose les nomme automatiquement à partir du nom de projet (-p),
+    # que la plateforme (Dokploy) fixe déjà de façon unique par déploiement.
+
     # Charger automatiquement les variables depuis .env
     env_file:
       - .env
