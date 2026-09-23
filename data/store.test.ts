@@ -18,13 +18,18 @@ import {
   reinitialiserDonneesDemo,
   rafraichirFraicheurScenarios,
 } from './store';
-import { interventions as interventionsInitiales, tickets as ticketsInitiaux } from './mockData';
+import {
+  interventions as interventionsInitiales,
+  tickets as ticketsInitiaux,
+  reaffectations as reaffectationsInitiales,
+} from './mockData';
 import {
   StatutIntervention,
   MotifIntervention,
   TypeCiblePlanning,
   TypeEtapeIntervention,
   type Intervention,
+  type Reaffectation,
 } from '@/domain/types';
 
 const uneHeureMs = 60 * 60 * 1000;
@@ -50,18 +55,44 @@ const ms = (dateISO: string): number => new Date(dateISO).getTime();
 const jalonsRenseignesMs = (i: Intervention): number[] =>
   JALONS.map((champ) => i[champ]).filter((d): d is string => d !== undefined).map(ms);
 
-/** Jalon le plus récent effectivement renseigné (ms), au pire la création. */
-const dernierJalonMs = (i: Intervention): number => Math.max(...jalonsRenseignesMs(i));
+/** Réaffectations visant une intervention donnée, parmi `reaffectations`. */
+const reaffectationsDe = (reaffectations: Reaffectation[], interventionId: string): Reaffectation[] =>
+  reaffectations.filter((r) => r.cibleType === TypeCiblePlanning.INTERVENTION && r.cibleId === interventionId);
+
+/**
+ * Jalon le plus récent effectivement renseigné (ms), au pire la création —
+ * réaffectations de l'intervention comprises, comme dans data/store.ts.
+ */
+const dernierJalonMs = (i: Intervention, reaffectations: Reaffectation[] = getAllReaffectations()): number =>
+  Math.max(...jalonsRenseignesMs(i), ...reaffectationsDe(reaffectations, i.id).map((r) => ms(r.dateHeure)));
 
 const estPersonneBloqueeOuverte = (i: Intervention): boolean =>
   i.motif === MotifIntervention.PERSONNE_BLOQUEE && i.statut !== StatutIntervention.CLOTURE;
 
-/** Interventions référencées par une Reaffectation ou un Rapport — exclues du recalage de fraîcheur. */
-const interventionsAvecHistoriqueFige = (): Set<string> =>
-  new Set([
-    ...getAllReaffectations().filter((r) => r.cibleType === TypeCiblePlanning.INTERVENTION).map((r) => r.cibleId),
-    ...getAllRapports().flatMap((r) => (r.interventionId ? [r.interventionId] : [])),
-  ]);
+/** Interventions référencées par un Rapport — seules exclues du recalage de fraîcheur. */
+const interventionsAvecRapport = (rapports = getAllRapports()): Set<string> =>
+  new Set(rapports.flatMap((r) => (r.interventionId ? [r.interventionId] : [])));
+
+/** Interventions visées par au moins une Reaffectation. */
+const interventionsReaffectees = (reaffectations = getAllReaffectations()): Set<string> =>
+  new Set(reaffectations.filter((r) => r.cibleType === TypeCiblePlanning.INTERVENTION).map((r) => r.cibleId));
+
+type LecturesStore = Pick<typeof import('./store'), 'getAllInterventions' | 'getAllReaffectations' | 'getAllRapports'>;
+
+/**
+ * Ancienneté (ms) du jalon le plus récent — réaffectations comprises — de
+ * chaque urgence « personne bloquée » rafraîchissable (ouverte, sans Rapport).
+ * C'est ce qui décide de l'aspect « récent » de l'aperçu « Personne bloquée »
+ * du tableau de bord (lib/derived/dashboard.ts).
+ */
+const ancienneteDesUrgencesRafraichissables = (store: LecturesStore, maintenantMs: number) => {
+  const reaffectations = store.getAllReaffectations();
+  const avecRapport = interventionsAvecRapport(store.getAllRapports());
+  return store
+    .getAllInterventions()
+    .filter((i) => estPersonneBloqueeOuverte(i) && !avecRapport.has(i.id))
+    .map((intervention) => ({ intervention, ancienneteMs: maintenantMs - dernierJalonMs(intervention, reaffectations) }));
+};
 
 /** Recule de `decalageMs` tous les horodatages renseignés d'une intervention (jalons et fenêtre SLA). */
 const reculer = (i: Intervention, decalageMs: number): Intervention => {
@@ -134,10 +165,11 @@ describe('rafraichirFraicheurScenarios', () => {
     reinitialiserDonneesDemo();
     const maintenantMs = getDateDemo().getTime();
     const origines = new Map(interventionsInitiales.map((i) => [i.id, i]));
-    const figees = interventionsAvecHistoriqueFige();
+    const avecRapport = interventionsAvecRapport();
+    const reaffectees = interventionsReaffectees();
 
     const engagees = getAllInterventions().filter(
-      (i) => estPersonneBloqueeOuverte(i) && !figees.has(i.id) && i.dateAffectation !== undefined
+      (i) => estPersonneBloqueeOuverte(i) && !avecRapport.has(i.id) && i.dateAffectation !== undefined
     );
 
     expect(engagees.length).toBeGreaterThan(0);
@@ -172,10 +204,16 @@ describe('rafraichirFraicheurScenarios', () => {
       }
     }
 
-    // Cas type : une urgence seulement affectée — l'affectation devient récente, et la
-    // création la précède exactement du même écart qu'à l'origine.
+    // Cas type : une urgence seulement affectée (ni réaffectée, ni plus avancée) — l'affectation
+    // devient récente, et la création la précède exactement du même écart qu'à l'origine.
     const seulementAffectees = engagees.filter(
-      (i) => !i.datePriseEnCharge && !i.dateArriveeSite && !i.dateTerminee && !i.dateValidation && !i.dateCloture
+      (i) =>
+        !reaffectees.has(i.id) &&
+        !i.datePriseEnCharge &&
+        !i.dateArriveeSite &&
+        !i.dateTerminee &&
+        !i.dateValidation &&
+        !i.dateCloture
     );
     expect(seulementAffectees.length).toBeGreaterThan(0);
     for (const intervention of seulementAffectees) {
@@ -187,60 +225,147 @@ describe('rafraichirFraicheurScenarios', () => {
     }
   });
 
-  it('laisse intactes les urgences « personne bloquée » référencées par une Reaffectation ou un Rapport', () => {
+  it('décale les urgences « personne bloquée » déjà réaffectées du même bloc que leurs réaffectations', () => {
+    reinitialiserDonneesDemo();
+    const maintenantMs = getDateDemo().getTime();
+    const origines = new Map(interventionsInitiales.map((i) => [i.id, i]));
+    const avecRapport = interventionsAvecRapport();
+    const reaffectees = interventionsReaffectees();
+
+    // Jeu de données réel : ces urgences (qui ont les échéances SLA les plus anciennes, donc la
+    // tête de l'aperçu du tableau de bord) sont rafraîchies, réaffectations comprises.
+    const reaffecteesOuvertes = getAllInterventions().filter(
+      (i) => estPersonneBloqueeOuverte(i) && reaffectees.has(i.id) && !avecRapport.has(i.id)
+    );
+    expect(reaffecteesOuvertes.length).toBeGreaterThan(0);
+    for (const intervention of reaffecteesOuvertes) {
+      const origine = origines.get(intervention.id)!;
+      const decalageMs = ms(intervention.dateCreation) - ms(origine.dateCreation);
+      expect(decalageMs).toBeGreaterThan(0);
+
+      // Un seul et même décalage pour chaque horodatage renseigné de l'intervention…
+      for (const champ of [...JALONS, 'dateDebutDecompteSLA', 'dateLimiteSLA'] as const) {
+        const valeurOrigine = origine[champ];
+        if (valeurOrigine === undefined) expect(intervention[champ]).toBeUndefined();
+        else expect(ms(intervention[champ]!) - ms(valeurOrigine)).toBe(decalageMs);
+      }
+      // … et pour le dateHeure de chacune de ses réaffectations.
+      const reaffectationsOrigine = reaffectationsDe(reaffectationsInitiales, intervention.id);
+      const reaffectationsDecalees = reaffectationsDe(getAllReaffectations(), intervention.id);
+      expect(reaffectationsDecalees).toHaveLength(reaffectationsOrigine.length);
+      for (const reaffectation of reaffectationsDecalees) {
+        const reaffectationOrigine = reaffectationsOrigine.find((r) => r.id === reaffectation.id)!;
+        expect(ms(reaffectation.dateHeure) - ms(reaffectationOrigine.dateHeure)).toBe(decalageMs);
+        // Seul l'horodatage bouge.
+        expect({ ...reaffectation, dateHeure: reaffectationOrigine.dateHeure }).toEqual(reaffectationOrigine);
+        // Chaque réaffectation reste postérieure aux jalons qui la précédaient à l'origine.
+        for (const champ of JALONS) {
+          const valeurOrigine = origine[champ];
+          if (valeurOrigine !== undefined && ms(valeurOrigine) <= ms(reaffectationOrigine.dateHeure)) {
+            expect(ms(reaffectation.dateHeure)).toBeGreaterThanOrEqual(ms(intervention[champ]!));
+          }
+        }
+        expect(ms(reaffectation.dateHeure)).toBeLessThanOrEqual(maintenantMs);
+      }
+
+      // Le jalon le plus récent, réaffectations comprises, date de moins d'une heure, jamais du futur.
+      const ancienneteMs = maintenantMs - dernierJalonMs(intervention);
+      expect(ancienneteMs).toBeGreaterThanOrEqual(0);
+      expect(ancienneteMs).toBeLessThan(uneHeureMs);
+    }
+
+    // Cas construit : une urgence vieillie de 10 jours, puis réaffectée 2 h après son dernier jalon
+    // (donc toujours 10 jours plus tôt). Tout est rajeuni ensemble, et la réaffectation, devenue
+    // le jalon le plus récent, atterrit juste avant maintenant sans dépasser.
+    const candidate = getAllInterventions().find(
+      (i) => estPersonneBloqueeOuverte(i) && !avecRapport.has(i.id) && !reaffectees.has(i.id) && i.dateAffectation !== undefined
+    )!;
+    const dixJoursMs = 10 * 24 * uneHeureMs;
+    const vieillie = reculer(candidate, dixJoursMs);
+    updateIntervention(vieillie);
+    const dateReaffectationVieillie = new Date(dernierJalonMs(vieillie, []) + 2 * uneHeureMs).toISOString();
+    const modeleReaffectation = getAllReaffectations().find((r) => r.cibleType === TypeCiblePlanning.INTERVENTION)!;
+    addReaffectation({
+      ...modeleReaffectation,
+      id: 'reaf-test-decalee',
+      cibleId: candidate.id,
+      dateHeure: dateReaffectationVieillie,
+    });
+
+    rafraichirFraicheurScenarios();
+
+    const rafraichie = getInterventionById(candidate.id)!;
+    const reaffectation = getAllReaffectations().find((r) => r.id === 'reaf-test-decalee')!;
+    const decalageMs = ms(rafraichie.dateCreation) - ms(vieillie.dateCreation);
+    expect(decalageMs).toBeGreaterThan(9 * 24 * uneHeureMs);
+    expect(ms(reaffectation.dateHeure) - ms(dateReaffectationVieillie)).toBe(decalageMs);
+    const maintenantApresMs = getDateDemo().getTime();
+    for (const jalon of jalonsRenseignesMs(rafraichie)) {
+      expect(jalon).toBeLessThan(ms(reaffectation.dateHeure));
+    }
+    expect(ms(reaffectation.dateHeure)).toBeLessThanOrEqual(maintenantApresMs);
+    expect(maintenantApresMs - ms(reaffectation.dateHeure)).toBeLessThan(uneHeureMs);
+  });
+
+  it('laisse intactes les urgences « personne bloquée » auxquelles un Rapport est rattaché', () => {
     reinitialiserDonneesDemo();
     const origines = new Map(interventionsInitiales.map((i) => [i.id, i]));
     const ticketsOrigine = new Map(ticketsInitiaux.map((t) => [t.id, t]));
-    const reaffectees = new Set(
-      getAllReaffectations().filter((r) => r.cibleType === TypeCiblePlanning.INTERVENTION).map((r) => r.cibleId)
-    );
-    const avecRapport = new Set(getAllRapports().flatMap((r) => (r.interventionId ? [r.interventionId] : [])));
+    const reaffectationsOrigine = new Map(reaffectationsInitiales.map((r) => [r.id, r]));
+    const avecRapport = interventionsAvecRapport();
 
-    // Jeu de données réel : les deux cas d'exclusion sont présents, et gardent leurs dates d'origine.
-    const personnesBloqueesOuvertes = getAllInterventions().filter(estPersonneBloqueeOuverte);
-    expect(personnesBloqueesOuvertes.some((i) => reaffectees.has(i.id))).toBe(true);
-    expect(personnesBloqueesOuvertes.some((i) => avecRapport.has(i.id))).toBe(true);
-    for (const intervention of personnesBloqueesOuvertes.filter((i) => reaffectees.has(i.id) || avecRapport.has(i.id))) {
+    // Jeu de données réel : le cas d'exclusion est présent, et garde ses dates d'origine.
+    const avecRapportOuvertes = getAllInterventions().filter((i) => estPersonneBloqueeOuverte(i) && avecRapport.has(i.id));
+    expect(avecRapportOuvertes.length).toBeGreaterThan(0);
+    for (const intervention of avecRapportOuvertes) {
       expect(intervention).toEqual(origines.get(intervention.id));
       for (const ticket of getTicketsByInterventionId(intervention.id)) {
         expect(ticket).toEqual(ticketsOrigine.get(ticket.id));
       }
+      for (const reaffectation of reaffectationsDe(getAllReaffectations(), intervention.id)) {
+        expect(reaffectation).toEqual(reaffectationsOrigine.get(reaffectation.id));
+      }
     }
 
-    // Cas construit : deux urgences rafraîchissables, vieillies de 10 jours, deviennent
-    // intouchables dès qu'une réaffectation (resp. un rapport) les référence.
-    const figees = interventionsAvecHistoriqueFige();
-    const [pourReaffectation, pourRapport] = getAllInterventions().filter(
-      (i) => estPersonneBloqueeOuverte(i) && !figees.has(i.id)
-    );
+    // Cas construit : une urgence rafraîchissable, vieillie de 10 jours et réaffectée, devient
+    // intouchable — réaffectation comprise — dès qu'un rapport la référence.
+    const [pourRapport] = getAllInterventions().filter((i) => estPersonneBloqueeOuverte(i) && !avecRapport.has(i.id));
     const dixJoursMs = 10 * 24 * uneHeureMs;
-    const vieillieReaffectee = reculer(pourReaffectation, dixJoursMs);
     const vieillieAvecRapport = reculer(pourRapport, dixJoursMs);
-    updateIntervention(vieillieReaffectee);
     updateIntervention(vieillieAvecRapport);
     const modeleReaffectation = getAllReaffectations().find((r) => r.cibleType === TypeCiblePlanning.INTERVENTION)!;
-    addReaffectation({ ...modeleReaffectation, id: 'reaf-test-fige', cibleId: pourReaffectation.id });
+    const reaffectationFigee: Reaffectation = {
+      ...modeleReaffectation,
+      id: 'reaf-test-fige',
+      cibleId: pourRapport.id,
+      dateHeure: new Date(dernierJalonMs(vieillieAvecRapport, []) + uneHeureMs).toISOString(),
+    };
+    addReaffectation(reaffectationFigee);
     const modeleRapport = getAllRapports().find((r) => r.interventionId !== undefined)!;
     addRapport({ ...modeleRapport, id: 'rap-test-fige', interventionId: pourRapport.id });
 
     rafraichirFraicheurScenarios();
 
-    expect(getInterventionById(pourReaffectation.id)).toEqual(vieillieReaffectee);
     expect(getInterventionById(pourRapport.id)).toEqual(vieillieAvecRapport);
+    expect(getAllReaffectations().find((r) => r.id === 'reaf-test-fige')).toEqual(reaffectationFigee);
   });
 
-  it("après réinitialisation, le jalon le plus récent de chaque urgence « personne bloquée » rafraîchissable date de moins d'une heure", () => {
+  it("après réinitialisation, le jalon le plus récent (réaffectations comprises) de chaque urgence « personne bloquée » sans rapport date de moins d'une heure", () => {
     reinitialiserDonneesDemo();
     const maintenantMs = getDateDemo().getTime();
-    const figees = interventionsAvecHistoriqueFige();
+    const reaffectees = interventionsReaffectees();
 
-    const rafraichissables = getAllInterventions().filter((i) => estPersonneBloqueeOuverte(i) && !figees.has(i.id));
+    const mesures = ancienneteDesUrgencesRafraichissables(
+      { getAllInterventions, getAllReaffectations, getAllRapports },
+      maintenantMs
+    );
 
-    expect(rafraichissables.length).toBeGreaterThan(0);
-    // Couvre bien les urgences déjà engagées sur le terrain (en cours, en attente de pièce, à reprendre…), pas seulement les NOUVEAU.
-    expect(rafraichissables.some((i) => i.dateArriveeSite !== undefined)).toBe(true);
-    for (const intervention of rafraichissables) {
-      const ancienneteMs = maintenantMs - dernierJalonMs(intervention);
+    expect(mesures.length).toBeGreaterThan(0);
+    // Couvre bien les urgences déjà engagées sur le terrain (en cours, en attente de pièce, à reprendre…), pas seulement les NOUVEAU…
+    expect(mesures.some(({ intervention }) => intervention.dateArriveeSite !== undefined)).toBe(true);
+    // … et les urgences déjà réaffectées, qui dominaient la tête de l'aperçu du tableau de bord.
+    expect(mesures.some(({ intervention }) => reaffectees.has(intervention.id))).toBe(true);
+    for (const { ancienneteMs } of mesures) {
       expect(ancienneteMs).toBeGreaterThanOrEqual(0);
       expect(ancienneteMs).toBeLessThan(uneHeureMs);
     }
@@ -353,5 +478,56 @@ describe("partage d'état entre « couches » Next.js (globalThis)", () => {
     const relue = store2.getAllInterventions().find((i) => i.id === premiere.id);
 
     expect(relue?.statut).toBe(autreStatut);
+  });
+});
+
+describe('rafraîchissement au premier chargement du module (démarrage du process)', () => {
+  it("un process neuf voit d'emblée des urgences « personne bloquée » récentes, sans réinitialisation, et une réévaluation ultérieure du module ne les rafraîchit pas une seconde fois", async () => {
+    const globalMagasin = globalThis as { __magasinManelift?: unknown };
+    const magasinDuFichier = globalMagasin.__magasinManelift;
+    expect(magasinDuFichier).toBeDefined();
+    try {
+      // Simule un process neuf : aucun magasin encore créé sur globalThis, puis
+      // premier chargement du module (et de data/mockData.ts, aux dates brutes).
+      delete globalMagasin.__magasinManelift;
+      vi.resetModules();
+      const storeNeuf = await import('./store');
+      expect(globalMagasin.__magasinManelift).toBeDefined();
+      expect(globalMagasin.__magasinManelift).not.toBe(magasinDuFichier);
+
+      // Aucun appel à reinitialiserDonneesDemo() : la fraîcheur vient du seul chargement.
+      const mesures = ancienneteDesUrgencesRafraichissables(storeNeuf, storeNeuf.getDateDemo().getTime());
+      expect(mesures.length).toBeGreaterThan(0);
+      for (const { ancienneteMs } of mesures) {
+        expect(ancienneteMs).toBeGreaterThanOrEqual(0);
+        expect(ancienneteMs).toBeLessThan(uneHeureMs);
+      }
+
+      // Une réévaluation du module (autre « couche » Next.js, hot reload) retrouve le
+      // magasin existant et ne le rafraîchit pas à nouveau : une urgence volontairement
+      // vieillie entre-temps reste vieillie.
+      const cible = mesures[0].intervention;
+      const vieillie = reculer(cible, 10 * 24 * uneHeureMs);
+      storeNeuf.updateIntervention(vieillie);
+      vi.resetModules();
+      const storeReevalue = await import('./store');
+      expect(storeReevalue).not.toBe(storeNeuf);
+      expect(storeReevalue.getInterventionById(cible.id)).toEqual(vieillie);
+
+      // La réinitialisation manuelle reste fonctionnelle ensuite : elle repart des
+      // données brutes, et l'urgence vieillie redevient récente comme les autres.
+      storeReevalue.reinitialiserDonneesDemo();
+      expect(storeReevalue.getInterventionById(cible.id)).not.toEqual(vieillie);
+      const apresReset = ancienneteDesUrgencesRafraichissables(storeReevalue, storeReevalue.getDateDemo().getTime());
+      expect(apresReset).toHaveLength(mesures.length);
+      for (const { ancienneteMs } of apresReset) {
+        expect(ancienneteMs).toBeGreaterThanOrEqual(0);
+        expect(ancienneteMs).toBeLessThan(uneHeureMs);
+      }
+    } finally {
+      // Rend au reste du fichier le magasin sur lequel ses imports statiques travaillent.
+      globalMagasin.__magasinManelift = magasinDuFichier;
+      vi.resetModules();
+    }
   });
 });

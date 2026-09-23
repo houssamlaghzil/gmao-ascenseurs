@@ -238,7 +238,16 @@ function creerMagasinInitial(): MagasinDonnees {
 }
 
 const globalThisMagasin = globalThis as typeof globalThis & { __magasinManelift?: MagasinDonnees };
+// Vrai uniquement pour la toute première évaluation de ce module dans le
+// process : les réévaluations suivantes (autres « couches » Next.js, hot
+// reload) retrouvent le magasin déjà créé — et déjà rafraîchi — sur globalThis.
+const magasinCreeParCetteEvaluation = globalThisMagasin.__magasinManelift === undefined;
 const magasin: MagasinDonnees = globalThisMagasin.__magasinManelift ?? (globalThisMagasin.__magasinManelift = creerMagasinInitial());
+// Le magasin tout juste créé est rafraîchi (rafraichirFraicheurScenarios) à la
+// fin de ce fichier, et non ici : la fonction lit des constantes de module
+// déclarées plus bas (JALONS_INTERVENTION, HORODATAGES_RESERVE), encore en zone
+// morte temporelle à cette ligne. L'évaluation du module étant synchrone,
+// aucune lecture ne peut s'intercaler entre les deux.
 
 // Données référentielles jamais réassignées ni mutées en place : chaque
 // « couche » Next.js peut en garder sa propre copie identique (même seed
@@ -1217,26 +1226,35 @@ const JALONS_INTERVENTION = [
 /**
  * Vrai si l'intervention est une urgence « personne bloquée » encore ouverte
  * que le recalage de fraîcheur peut rajeunir : motif PERSONNE_BLOQUEE, non
- * clôturée, et sans aucune Reaffectation ni aucun Rapport rattaché. Une
- * réaffectation porte un horodatage réel et immuable (domain/types.ts), et un
- * rapport marque une intervention trop avancée pour réécrire son historique :
- * ces interventions gardent leurs dates d'origine.
+ * clôturée, et sans aucun Rapport rattaché — un rapport représente assez de
+ * travail de terrain réel pour que son historique reste intact. Une
+ * intervention déjà réaffectée reste en revanche rafraîchissable : ses
+ * réaffectations sont décalées du même bloc qu'elle (voir
+ * `rafraichirFraicheurScenarios`), faute de quoi les urgences réaffectées,
+ * restées à leur âge d'origine, occuperaient la tête de l'aperçu « Personne
+ * bloquée » du tableau de bord (lib/derived/dashboard.ts, tri par échéance SLA).
  */
-function estRafraichissable(intervention: Intervention, interventionsAvecHistoriqueFige: ReadonlySet<string>): boolean {
+function estRafraichissable(intervention: Intervention, interventionsAvecRapport: ReadonlySet<string>): boolean {
   return (
     intervention.motif === MotifIntervention.PERSONNE_BLOQUEE &&
     intervention.statut !== StatutIntervention.CLOTURE &&
-    !interventionsAvecHistoriqueFige.has(intervention.id)
+    !interventionsAvecRapport.has(intervention.id)
   );
 }
 
-/** Horodatage (ms) du jalon le plus récent effectivement renseigné — au pire `dateCreation`, toujours présente. */
-function dernierJalonMs(intervention: Intervention): number {
+/**
+ * Horodatage (ms) du jalon le plus récent effectivement renseigné — au pire
+ * `dateCreation`, toujours présente. Les réaffectations de l'intervention
+ * comptent comme des jalons : une réattribution postérieure à l'affectation
+ * est un événement plus récent de son historique.
+ */
+function dernierJalonMs(intervention: Intervention, datesReaffectationMs: ReadonlyArray<number>): number {
   let dernierMs = new Date(intervention.dateCreation).getTime();
   for (const champ of JALONS_INTERVENTION) {
     const valeur = intervention[champ];
     if (valeur) dernierMs = Math.max(dernierMs, new Date(valeur).getTime());
   }
+  for (const dateMs of datesReaffectationMs) dernierMs = Math.max(dernierMs, dateMs);
   return dernierMs;
 }
 
@@ -1268,13 +1286,21 @@ const HORODATAGES_RESERVE = [
  *
  * Chaque urgence rafraîchissable (voir `estRafraichissable`) est décalée d'un
  * seul bloc : un unique décalage, calculé pour amener son jalon le PLUS
- * RÉCENT (affectation, prise en charge, arrivée…, à défaut la création) à
- * quelques minutes de maintenant, est appliqué à tous ses horodatages
- * renseignés — jalons, fenêtre SLA — et à ses tickets rattachés. Les écarts
- * entre jalons sont donc conservés à l'identique (aucun jalon ne passe avant
- * un jalon antérieur), et comme le plus récent atterrit dans le passé, aucun
- * jalon ne se retrouve dans le futur. Seule l'échéance SLA, qui est une
- * limite et non un fait accompli, peut légitimement rester à venir.
+ * RÉCENT (affectation, réaffectation, prise en charge, arrivée…, à défaut la
+ * création) à quelques minutes de maintenant, est appliqué à tous ses
+ * horodatages renseignés — jalons, fenêtre SLA —, à ses tickets rattachés et
+ * au `dateHeure` de ses réaffectations. Les écarts entre jalons sont donc
+ * conservés à l'identique (aucun jalon ne passe avant un jalon antérieur), et
+ * comme le plus récent atterrit dans le passé, aucun jalon ne se retrouve dans
+ * le futur. Seule l'échéance SLA, qui est une limite et non un fait accompli,
+ * peut légitimement rester à venir.
+ *
+ * Décaler `Reaffectation.dateHeure` déroge sciemment à son caractère
+ * « immuable » (domain/types.ts) : arbitrage explicite pour cette maquette à
+ * données fictives, sans exigence de piste d'audit réelle.
+ *
+ * Appelée au premier chargement du module dans le process (voir la fin de ce
+ * fichier) et à chaque `reinitialiserDonneesDemo()`.
  */
 export function rafraichirFraicheurScenarios(): void {
   const maintenant = getDateDemo();
@@ -1282,15 +1308,22 @@ export function rafraichirFraicheurScenarios(): void {
   const decalageParIntervention = new Map<string, number>();
   let rang = 0;
 
-  const interventionsAvecHistoriqueFige = new Set<string>([
-    ...magasin.reaffectations.filter((r) => r.cibleType === TypeCiblePlanning.INTERVENTION).map((r) => r.cibleId),
-    ...magasin.rapports.flatMap((r) => (r.interventionId ? [r.interventionId] : [])),
-  ]);
+  const interventionsAvecRapport = new Set<string>(
+    magasin.rapports.flatMap((r) => (r.interventionId ? [r.interventionId] : []))
+  );
+  const datesReaffectationParIntervention = new Map<string, number[]>();
+  for (const reaffectation of magasin.reaffectations) {
+    if (reaffectation.cibleType !== TypeCiblePlanning.INTERVENTION) continue;
+    const dates = datesReaffectationParIntervention.get(reaffectation.cibleId) ?? [];
+    dates.push(new Date(reaffectation.dateHeure).getTime());
+    datesReaffectationParIntervention.set(reaffectation.cibleId, dates);
+  }
 
   magasin.interventions = magasin.interventions.map((intervention) => {
-    if (!estRafraichissable(intervention, interventionsAvecHistoriqueFige)) return intervention;
+    if (!estRafraichissable(intervention, interventionsAvecRapport)) return intervention;
     const ancienneteMinutes = 5 + ((rang++ * 7) % 40); // étalées entre 5 et 44 minutes, de façon déterministe
-    const decalageMs = maintenantMs - ancienneteMinutes * 60_000 - dernierJalonMs(intervention);
+    const dernierMs = dernierJalonMs(intervention, datesReaffectationParIntervention.get(intervention.id) ?? []);
+    const decalageMs = maintenantMs - ancienneteMinutes * 60_000 - dernierMs;
     decalageParIntervention.set(intervention.id, decalageMs);
     const decalee: Intervention = {
       ...intervention,
@@ -1318,6 +1351,16 @@ export function rafraichirFraicheurScenarios(): void {
     };
   });
 
+  // Les réaffectations d'une urgence décalée suivent exactement le même décalage :
+  // leur date entrant dans le calcul du jalon le plus récent, elles atterrissent
+  // au plus tard à ce jalon, donc jamais dans le futur, sans plafonnement.
+  magasin.reaffectations = magasin.reaffectations.map((reaffectation) => {
+    const decalageMs =
+      reaffectation.cibleType === TypeCiblePlanning.INTERVENTION ? decalageParIntervention.get(reaffectation.cibleId) : undefined;
+    if (decalageMs === undefined) return reaffectation;
+    return { ...reaffectation, dateHeure: decalerDateISO(reaffectation.dateHeure, decalageMs) };
+  });
+
   magasin.evenementsReserve = magasin.evenementsReserve.map((evenement) =>
     new Date(evenement.dateHeure).getTime() > maintenant.getTime()
       ? { ...evenement, dateHeure: maintenant.toISOString() }
@@ -1342,3 +1385,12 @@ export function rafraichirFraicheurScenarios(): void {
     return plafonnee;
   });
 }
+
+// Rafraîchissement au démarrage : sans lui, un serveur tout juste (re)démarré
+// affiche les dates brutes du jeu de données (urgences « personne bloquée »
+// vieilles de plusieurs jours) tant que personne n'a cliqué sur
+// « réinitialiser la démonstration ». Une seule fois par process (voir
+// `magasinCreeParCetteEvaluation` en tête de fichier). Aucune invalidation
+// n'est nécessaire : les index et le cache de chronologie du magasin neuf
+// n'ont encore jamais été construits.
+if (magasinCreeParCetteEvaluation) rafraichirFraicheurScenarios();

@@ -679,7 +679,7 @@ export interface Reaffectation {
   nouveauTechnicienId: string;
   motif: MotifReattribution;
   commentaire?: string;
-  dateHeure: string; // ISO — horodatage réel, immuable
+  dateHeure: string; // ISO — horodatage réel, immuable (seule exception : le recalage de fraîcheur de la démo, rafraichirFraicheurScenarios dans data/store.ts)
   origine: OrigineAction;
   demandeurNom?: string; // dispatcher (Web) ou technicien lui-même (Mobile)
   origineAbsenceId?: string; // renseigné si déclenchée automatiquement par une AbsenceTechnicien
