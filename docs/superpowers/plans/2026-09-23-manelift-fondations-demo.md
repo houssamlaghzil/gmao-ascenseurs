@@ -30,7 +30,7 @@
 
 ---
 
-## Tâche 1 : Bandeau de démonstration global
+## Task 1: Bandeau de démonstration global
 
 **Dimensionnement recommandé : Sonnet 5** (composant présentatif isolé, aucune logique).
 
@@ -126,7 +126,7 @@ EOF
 
 ---
 
-## Tâche 2 : Horloge de démonstration (`getDateDemo`)
+## Task 2: Horloge de démonstration (`getDateDemo`)
 
 **Dimensionnement recommandé : Sonnet 5** (fonction unique, entièrement spécifiée).
 
@@ -206,7 +206,7 @@ EOF
 
 ---
 
-## Tâche 3 : Basculer tous les calculs dépendant du temps sur `getDateDemo()`
+## Task 3: Basculer tous les calculs dépendant du temps sur `getDateDemo()`
 
 **Dimensionnement recommandé : Opus 5.5** (mécanique mais transversal à ~15 fichiers ; une erreur ici se propage à toute la feuille de route — voir Review Focus).
 
@@ -495,7 +495,7 @@ EOF
 
 ---
 
-## Tâche 4 : Réinitialisation de la démonstration
+## Task 4: Réinitialisation de la démonstration
 
 **Dimensionnement recommandé : Opus 5.5** (touche l'intégralité du magasin de données partagé ; une régression ici casse toute démo en cours).
 
@@ -761,7 +761,7 @@ EOF
 
 ---
 
-## Tâche 5 : Test de non-régression — indépendance des dates contractuelles de maintenance
+## Task 5: Test de non-régression — indépendance des dates contractuelles de maintenance
 
 **Dimensionnement recommandé : Sonnet 5** (test isolé sur des fonctions pures déjà écrites, aucune nouvelle logique).
 
@@ -850,7 +850,7 @@ EOF
 
 ---
 
-## Tâche 6 : Bascule Web ⇄ Android dans la navigation
+## Task 6: Bascule Web ⇄ Android dans la navigation
 
 **Dimensionnement recommandé : Sonnet 5** (composant présentatif, deux fichiers).
 
@@ -929,7 +929,7 @@ EOF
 
 ---
 
-## Tâche 7 : Vérification globale et mise à jour du README
+## Task 7: Vérification globale et mise à jour du README
 
 **Dimensionnement recommandé : Sonnet 5.**
 
