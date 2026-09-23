@@ -6,12 +6,18 @@
  */
 
 import { ReactNode } from 'react';
+import Link from 'next/link';
 import { Wifi, BatteryFull } from 'lucide-react';
 
 export default function PhoneFrame({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 py-10 px-4">
-      <p className="text-sm text-gray-500">Aperçu — application mobile technicien</p>
+      <div className="flex items-center gap-3">
+        <p className="text-sm text-gray-500">Aperçu — application mobile technicien</p>
+        <Link href="/" className="text-sm font-medium text-blue-600 hover:text-blue-800 underline">
+          Retour à la vue Web
+        </Link>
+      </div>
 
       <div className="relative w-[390px] max-w-full rounded-[2.5rem] border-8 border-gray-900 bg-gray-900 shadow-2xl">
         <div className="absolute left-1/2 top-0 -translate-x-1/2 h-6 w-32 bg-gray-900 rounded-b-2xl z-10" />

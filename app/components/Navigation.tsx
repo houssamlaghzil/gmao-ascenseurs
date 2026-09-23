@@ -26,6 +26,7 @@ import {
   Compass,
   Map,
   Gauge,
+  Smartphone,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -129,6 +130,13 @@ export default function Navigation() {
       </nav>
 
       <div className="p-3 border-t border-gray-200 shrink-0">
+        <Link
+          href="/mobile"
+          className="flex items-center justify-center gap-2 px-3 py-2 mb-2 text-sm font-medium text-white bg-gray-900 rounded-md hover:bg-gray-800 transition-colors"
+        >
+          <Smartphone className="h-3.5 w-3.5" />
+          Vue technicien (Android)
+        </Link>
         <Link href="/taches" className="flex items-center gap-2 px-3 py-2 mb-1 text-sm text-gray-500 hover:text-blue-600 rounded-md hover:bg-gray-50 transition-colors"><ListTodo className="h-3.5 w-3.5" />Tâches</Link>
         {/* Ce bouton sert d'ancre à la palette : elle se déplie depuis sa
             position, y compris quand elle est ouverte au clavier. */}
