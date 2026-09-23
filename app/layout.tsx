@@ -19,6 +19,15 @@ const inter = localFont({
 export const metadata: Metadata = {
   title: 'Manei-Lift - GMAO Ascenseurs',
   description: 'Maquette GMAO Manei-Lift : pilotage du parc, interventions, maintenances et CTQ pour la gestion d\'un parc d\'ascenseurs',
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: {
+      index: false,
+      follow: false,
+    },
+  },
 };
 
 export default function RootLayout({
