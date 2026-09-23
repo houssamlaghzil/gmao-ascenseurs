@@ -1247,11 +1247,13 @@ function decalerDateISO(dateISO: string, decalageMs: number): string {
 /**
  * Horodatages de fait accompli d'une réserve CTQ, dans l'ordre de son cycle
  * de vie (domain/types.ts). `dateEcheance` n'en fait pas partie : c'est une
- * limite, qui peut légitimement tomber dans le futur.
+ * limite, qui peut légitimement tomber dans le futur. `datePlanification`
+ * non plus : c'est la date d'un rendez-vous planifié, fixée par
+ * `planifierReserve` (domain/business-logic.ts) comme une échéance à venir,
+ * pas la trace d'un événement déjà survenu.
  */
 const HORODATAGES_RESERVE = [
   'dateConstat',
-  'datePlanification',
   'dateTraitement',
   'dateValidation',
 ] as const satisfies ReadonlyArray<keyof ReserveCTQ>;

@@ -274,12 +274,38 @@ describe('rafraichirFraicheurScenarios', () => {
     expect(getReserveCTQById(reservePassee.id)?.dateValidation).toBe(passe);
   });
 
+  it('laisse inchangée une date de planification de réserve future, tout en plafonnant une date de validation restée dans le futur', () => {
+    reinitialiserDonneesDemo();
+    const maintenantMs = getDateDemo().getTime();
+    // Reflète le jeu de données réel : des réserves PLANIFIEE / EN_COURS portent
+    // un rendez-vous planifié à une date future légitime (planifierReserve).
+    const reservePlanifieeAuFutur = getAllReservesCTQ().find(
+      (r) => r.datePlanification !== undefined && ms(r.datePlanification) > maintenantMs
+    );
+    expect(reservePlanifieeAuFutur).toBeDefined();
+    const datePlanificationAvant = reservePlanifieeAuFutur!.datePlanification;
+
+    const reservePourValidation = getAllReservesCTQ().find((r) => r.id !== reservePlanifieeAuFutur!.id)!;
+    const futur = new Date(maintenantMs + 30 * 24 * uneHeureMs).toISOString();
+    updateReserveCTQ({ ...reservePourValidation, dateValidation: futur });
+
+    rafraichirFraicheurScenarios();
+
+    // datePlanification est un rendez-vous à venir, pas un horodatage de fait
+    // accompli : rafraichirFraicheurScenarios() ne doit pas y toucher.
+    expect(getReserveCTQById(reservePlanifieeAuFutur!.id)?.datePlanification).toBe(datePlanificationAvant);
+    // dateValidation enregistre elle un événement passé : elle reste plafonnée à « maintenant ».
+    expect(ms(getReserveCTQById(reservePourValidation.id)!.dateValidation!)).toBeLessThanOrEqual(getDateDemo().getTime());
+  });
+
   it("après réinitialisation, aucune réserve n'est traitée ni validée dans le futur, et aucune n'est validée avant d'être traitée", () => {
     reinitialiserDonneesDemo();
     const maintenantMs = getDateDemo().getTime();
 
     for (const reserve of getAllReservesCTQ()) {
-      for (const date of [reserve.dateConstat, reserve.datePlanification, reserve.dateTraitement, reserve.dateValidation]) {
+      // datePlanification est exclue : c'est un rendez-vous planifié qui peut
+      // légitimement rester dans le futur (cf. le test dédié ci-dessus).
+      for (const date of [reserve.dateConstat, reserve.dateTraitement, reserve.dateValidation]) {
         if (date !== undefined) expect(ms(date)).toBeLessThanOrEqual(maintenantMs);
       }
       // Plafonner la validation seule la placerait avant un traitement resté dans le futur.
