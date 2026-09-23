@@ -1253,9 +1253,10 @@ Run:
 npx vitest run
 npx tsc --noEmit
 npm run lint
-npm run build
 ```
-Expected: les quatre commandes réussissent sans erreur.
+Expected: les trois commandes réussissent sans erreur.
+
+Ne pas lancer `npm run build`/`next build`/`next dev`/`next start` dans ce dépôt : un serveur `next dev` tiers tourne déjà dessus (une fenêtre de l'utilisateur) et un `.next` partagé a déjà été corrompu une fois pendant ce plan par un build concurrent (voir Tâche 4). `npx tsc --noEmit` couvre déjà les erreurs de type qu'un build révélerait.
 
 - [ ] **Step 2 : Documenter les nouveautés dans le README**
 
