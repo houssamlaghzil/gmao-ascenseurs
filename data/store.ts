@@ -137,52 +137,120 @@ import { construireIndexes, type Indexes } from './indexes';
 export type { HistoriqueMaintenanceAgregat, CompteurRapportsAppareil };
 
 // ============================================================================
-// ÉTAT EN MÉMOIRE (réinitialisé à chaque redémarrage du serveur)
+// MAGASIN PARTAGÉ — stocké sur globalThis (pas sur des liaisons de module)
 // ============================================================================
+//
+// Next.js compile ce module séparément par « couche » (Server Components vs
+// Server Actions) : deux couches qui importent ce même fichier obtiennent
+// chacune leur PROPRE instance de module, donc des liaisons `let` de module
+// ne seraient PAS partagées entre une Server Action et la page qui affiche
+// son résultat (constaté : une réattribution répond 200 mais n'apparaît pas
+// après rechargement — voir Tâche 5 du plan de fondations et
+// https://github.com/vercel/next.js/issues/76025). `globalThis` est le seul
+// objet garanti partagé entre toutes les couches d'un même process Node : on
+// y stocke donc l'unique copie mutable de l'état, une fois pour tout le
+// process (réinitialisé à chaque redémarrage du serveur).
 
-let secteursGeographiques: SecteurGeographique[] = [...initialSecteursGeographiques];
-let techniciens: Technicien[] = [...initialTechniciens];
-let tournees: Tournee[] = [...initialTournees];
-let definitionsSLA: DefinitionSLA[] = [...initialDefinitionsSLA];
-let clients: Client[] = [...initialClients];
-let contrats: Contrat[] = [...initialContrats];
-let parcs: ParcAscenseurs[] = [...initialParcs];
-let ascenseurs: Ascenseur[] = [...initialAscenseurs];
-let entreesJournalModification: EntreeJournalModification[] = [...initialEntreesJournalModification];
-let utilisateurs: Utilisateur[] = [...initialUtilisateurs];
-let typesMaintenanceRef: TypeMaintenanceRef[] = [...initialTypesMaintenanceRef];
-let causesPanneRef: CausePanneRef[] = [...initialCausesPanneRef];
+interface MagasinDonnees {
+  secteursGeographiques: SecteurGeographique[];
+  techniciens: Technicien[];
+  tournees: Tournee[];
+  definitionsSLA: DefinitionSLA[];
+  clients: Client[];
+  contrats: Contrat[];
+  parcs: ParcAscenseurs[];
+  ascenseurs: Ascenseur[];
+  entreesJournalModification: EntreeJournalModification[];
+  utilisateurs: Utilisateur[];
+  typesMaintenanceRef: TypeMaintenanceRef[];
+  causesPanneRef: CausePanneRef[];
+  maintenances: Maintenance[];
+  interventions: Intervention[];
+  tickets: Ticket[];
+  reaffectations: Reaffectation[];
+  absencesTechnicien: AbsenceTechnicien[];
+  photosRapport: PhotoRapport[];
+  rapports: Rapport[];
+  bureauxEtudes: BureauEtudes[];
+  controlesCTQ: ControleCTQ[];
+  reservesCTQ: ReserveCTQ[];
+  evenementsReserve: EvenementReserve[];
+  sessionsTechnicien: SessionTechnicien[];
+  elementsFileSynchronisation: ElementFileSynchronisation[];
+  appareilsTelechargesLocalement: AppareilTelechargeLocalement[];
+  etatsPTITechnicien: EtatPTITechnicien[];
+  positionsTechnicien: PositionTechnicien[];
+  zonesGeographiques: ZoneGeographique[];
+  tourneesDuJour: TourneeDuJour[];
+  tachesAsynchrones: TacheAsynchrone[];
+  notifications: Notification[];
+  entreesAudit: EntreeAudit[];
+  integrationsExternes: IntegrationExterne[];
+  journalEchangesIntegration: JournalEchangeIntegration[];
+  indexesConstruits: Indexes | null;
+  versionIndexes: number;
+  versionIndexesConstruits: number;
+  cacheEtapesIntervention: Map<string, EtapeIntervention[]>;
+}
+
+function creerMagasinInitial(): MagasinDonnees {
+  return {
+    secteursGeographiques: [...initialSecteursGeographiques],
+    techniciens: [...initialTechniciens],
+    tournees: [...initialTournees],
+    definitionsSLA: [...initialDefinitionsSLA],
+    clients: [...initialClients],
+    contrats: [...initialContrats],
+    parcs: [...initialParcs],
+    ascenseurs: [...initialAscenseurs],
+    entreesJournalModification: [...initialEntreesJournalModification],
+    utilisateurs: [...initialUtilisateurs],
+    typesMaintenanceRef: [...initialTypesMaintenanceRef],
+    causesPanneRef: [...initialCausesPanneRef],
+    maintenances: [...initialMaintenances],
+    interventions: [...initialInterventions],
+    tickets: [...initialTickets],
+    reaffectations: [...initialReaffectations],
+    absencesTechnicien: [...initialAbsencesTechnicien],
+    photosRapport: [...initialPhotosRapport],
+    rapports: [...initialRapports],
+    bureauxEtudes: [...initialBureauxEtudes],
+    controlesCTQ: [...initialControlesCTQ],
+    reservesCTQ: [...initialReservesCTQ],
+    evenementsReserve: [...initialEvenementsReserve],
+    sessionsTechnicien: [...initialSessionsTechnicien],
+    elementsFileSynchronisation: [...initialElementsFileSynchronisation],
+    appareilsTelechargesLocalement: [...initialAppareilsTelechargesLocalement],
+    etatsPTITechnicien: [...initialEtatsPTITechnicien],
+    positionsTechnicien: [...initialPositionsTechnicien],
+    zonesGeographiques: [...initialZonesGeographiques],
+    tourneesDuJour: [...initialTourneesDuJour],
+    tachesAsynchrones: [...initialTachesAsynchrones],
+    notifications: [...initialNotifications],
+    entreesAudit: [...initialEntreesAudit],
+    integrationsExternes: [...initialIntegrationsExternes],
+    journalEchangesIntegration: [...initialJournalEchangesIntegration],
+    indexesConstruits: null,
+    versionIndexes: 0,
+    versionIndexesConstruits: -1,
+    cacheEtapesIntervention: new Map(),
+  };
+}
+
+const globalThisMagasin = globalThis as typeof globalThis & { __magasinManelift?: MagasinDonnees };
+const magasin: MagasinDonnees = globalThisMagasin.__magasinManelift ?? (globalThisMagasin.__magasinManelift = creerMagasinInitial());
+
+// Données référentielles jamais réassignées ni mutées en place : chaque
+// « couche » Next.js peut en garder sa propre copie identique (même seed
+// déterministe), aucun partage via le magasin n'est nécessaire.
 const historiqueMaintenanceParAscenseur: HistoriqueMaintenanceAgregat[] = [...initialHistoriqueMaintenance];
-let maintenances: Maintenance[] = [...initialMaintenances];
-let interventions: Intervention[] = [...initialInterventions];
-let tickets: Ticket[] = [...initialTickets];
-let reaffectations: Reaffectation[] = [...initialReaffectations];
-let absencesTechnicien: AbsenceTechnicien[] = [...initialAbsencesTechnicien];
 const equipementsReferentiel: EquipementReferentiel[] = [...initialEquipementsReferentiel];
 const etatsEquipementReferentiel: EtatEquipementReferentiel[] = [...initialEtatsEquipementReferentiel];
 const actionsDiagnosticReferentiel: ActionDiagnosticReferentiel[] = [...initialActionsDiagnosticReferentiel];
 const reglesObligationPhotos: RegleObligationPhotos[] = [...initialReglesObligationPhotos];
-let photosRapport: PhotoRapport[] = [...initialPhotosRapport];
-let rapports: Rapport[] = [...initialRapports];
 const rapportsAgregatGlobal: RapportsAgregatGlobal = { ...initialRapportsAgregatGlobal };
 const compteursRapportsParAppareil: CompteurRapportsAppareil[] = [...initialCompteursRapportsParAppareil];
-let bureauxEtudes: BureauEtudes[] = [...initialBureauxEtudes];
-let controlesCTQ: ControleCTQ[] = [...initialControlesCTQ];
-let reservesCTQ: ReserveCTQ[] = [...initialReservesCTQ];
-let evenementsReserve: EvenementReserve[] = [...initialEvenementsReserve];
-let sessionsTechnicien: SessionTechnicien[] = [...initialSessionsTechnicien];
-let elementsFileSynchronisation: ElementFileSynchronisation[] = [...initialElementsFileSynchronisation];
-let appareilsTelechargesLocalement: AppareilTelechargeLocalement[] = [...initialAppareilsTelechargesLocalement];
 const configurationsPTI: Record<string, ConfigurationPTI> = { ...initialConfigurationsPTI };
-let etatsPTITechnicien: EtatPTITechnicien[] = [...initialEtatsPTITechnicien];
-let positionsTechnicien: PositionTechnicien[] = [...initialPositionsTechnicien];
-let zonesGeographiques: ZoneGeographique[] = [...initialZonesGeographiques];
-let tourneesDuJour: TourneeDuJour[] = [...initialTourneesDuJour];
-let tachesAsynchrones: TacheAsynchrone[] = [...initialTachesAsynchrones];
-let notifications: Notification[] = [...initialNotifications];
-let entreesAudit: EntreeAudit[] = [...initialEntreesAudit];
-let integrationsExternes: IntegrationExterne[] = [...initialIntegrationsExternes];
-let journalEchangesIntegration: JournalEchangeIntegration[] = [...initialJournalEchangesIntegration];
 const rolesDefinitions: RoleDefinition[] = [...initialRolesDefinitions];
 const reglesMetier: RegleMetier[] = [...initialReglesMetier];
 const configurationsNotification: ConfigurationNotification[] = [...initialConfigurationsNotification];
@@ -191,23 +259,19 @@ const configurationsNotification: ConfigurationNotification[] = [...initialConfi
 // CACHE D'INDEX — reconstruit paresseusement, invalidé à chaque mutation
 // ============================================================================
 //
-// Les tableaux ci-dessus restent la source de vérité mutable. `obtenirIndexes()`
+// Les tableaux du magasin ci-dessus restent la source de vérité mutable. `obtenirIndexes()`
 // construit (une seule fois, en O(n), et uniquement à la demande) l'ensemble
 // des Map de recherche définies par data/indexes.ts, et les met en cache tant
-// qu'aucun mutateur n'a incrémenté `versionIndexes`. Voir data/indexes.ts pour
+// qu'aucun mutateur n'a incrémenté `magasin.versionIndexes`. Voir data/indexes.ts pour
 // le contrat complet (structure des Map, cas particuliers n-n et clé composite).
-
-let indexesConstruits: Indexes | null = null;
-let versionIndexes = 0;
-let versionIndexesConstruits = -1;
 
 /** Version courante des données — s'incrémente à chaque mutation. Sert de clé au cache de calcul entre requêtes (lib/derived/cache-calcul.ts). */
 export function getVersionDonnees(): number {
-  return versionIndexes;
+  return magasin.versionIndexes;
 }
 
 function invaliderIndexes(): void {
-  versionIndexes++;
+  magasin.versionIndexes++;
   try {
     revalidatePath('/', 'layout');
   } catch {
@@ -218,45 +282,45 @@ function invaliderIndexes(): void {
 }
 
 function obtenirIndexes(): Indexes {
-  if (indexesConstruits === null || versionIndexesConstruits !== versionIndexes) {
-    indexesConstruits = construireIndexes({
-      secteursGeographiques,
-      techniciens,
-      tournees,
-      clients,
-      contrats,
-      parcs,
-      ascenseurs,
-      entreesJournalModification,
-      interventions,
-      tickets,
-      reaffectations,
-      rapports,
-      photosRapport,
-      maintenances,
-      typesMaintenanceRef,
-      absencesTechnicien,
-      bureauxEtudes,
-      controlesCTQ,
-      reservesCTQ,
-      evenementsReserve,
-      utilisateurs,
-      integrationsExternes,
-      journalEchangesIntegration,
-      sessionsTechnicien,
-      elementsFileSynchronisation,
-      appareilsTelechargesLocalement,
-      etatsPTITechnicien,
-      positionsTechnicien,
-      zonesGeographiques,
-      tourneesDuJour,
-      tachesAsynchrones,
-      notifications,
-      entreesAudit,
+  if (magasin.indexesConstruits === null || magasin.versionIndexesConstruits !== magasin.versionIndexes) {
+    magasin.indexesConstruits = construireIndexes({
+      secteursGeographiques: magasin.secteursGeographiques,
+      techniciens: magasin.techniciens,
+      tournees: magasin.tournees,
+      clients: magasin.clients,
+      contrats: magasin.contrats,
+      parcs: magasin.parcs,
+      ascenseurs: magasin.ascenseurs,
+      entreesJournalModification: magasin.entreesJournalModification,
+      interventions: magasin.interventions,
+      tickets: magasin.tickets,
+      reaffectations: magasin.reaffectations,
+      rapports: magasin.rapports,
+      photosRapport: magasin.photosRapport,
+      maintenances: magasin.maintenances,
+      typesMaintenanceRef: magasin.typesMaintenanceRef,
+      absencesTechnicien: magasin.absencesTechnicien,
+      bureauxEtudes: magasin.bureauxEtudes,
+      controlesCTQ: magasin.controlesCTQ,
+      reservesCTQ: magasin.reservesCTQ,
+      evenementsReserve: magasin.evenementsReserve,
+      utilisateurs: magasin.utilisateurs,
+      integrationsExternes: magasin.integrationsExternes,
+      journalEchangesIntegration: magasin.journalEchangesIntegration,
+      sessionsTechnicien: magasin.sessionsTechnicien,
+      elementsFileSynchronisation: magasin.elementsFileSynchronisation,
+      appareilsTelechargesLocalement: magasin.appareilsTelechargesLocalement,
+      etatsPTITechnicien: magasin.etatsPTITechnicien,
+      positionsTechnicien: magasin.positionsTechnicien,
+      zonesGeographiques: magasin.zonesGeographiques,
+      tourneesDuJour: magasin.tourneesDuJour,
+      tachesAsynchrones: magasin.tachesAsynchrones,
+      notifications: magasin.notifications,
+      entreesAudit: magasin.entreesAudit,
     });
-    versionIndexesConstruits = versionIndexes;
+    magasin.versionIndexesConstruits = magasin.versionIndexes;
   }
-  return indexesConstruits;
+  return magasin.indexesConstruits;
 }
 
 // ============================================================================
@@ -280,26 +344,26 @@ export function getDateDemo(): Date {
 // ============================================================================
 
 export function getAllSecteursGeographiques(): SecteurGeographique[] {
-  return [...secteursGeographiques];
+  return [...magasin.secteursGeographiques];
 }
 export function getSecteurGeographiqueById(id: string): SecteurGeographique | undefined {
   return obtenirIndexes().secteursGeographiques.byId.get(id);
 }
 
 export function getAllTechniciens(): Technicien[] {
-  return [...techniciens];
+  return [...magasin.techniciens];
 }
 export function getTechnicienById(id: string): Technicien | undefined {
   return obtenirIndexes().techniciens.byId.get(id);
 }
 export function updateTechnicien(technicien: Technicien): void {
-  const index = techniciens.findIndex((t) => t.id === technicien.id);
-  if (index !== -1) techniciens[index] = technicien;
+  const index = magasin.techniciens.findIndex((t) => t.id === technicien.id);
+  if (index !== -1) magasin.techniciens[index] = technicien;
   invaliderIndexes();
 }
 
 export function getAllTournees(): Tournee[] {
-  return [...tournees];
+  return [...magasin.tournees];
 }
 export function getTourneeById(id: string): Tournee | undefined {
   return obtenirIndexes().tournees.byId.get(id);
@@ -312,14 +376,14 @@ export function getTourneesBySecteurId(secteurId: string): Tournee[] {
 }
 
 export function getAllDefinitionsSLA(): DefinitionSLA[] {
-  return [...definitionsSLA];
+  return [...magasin.definitionsSLA];
 }
 export function getDefinitionsSLAParContrat(contratId?: string): DefinitionSLA[] {
-  return definitionsSLA.filter((d) => d.contratId === contratId);
+  return magasin.definitionsSLA.filter((d) => d.contratId === contratId);
 }
 
 export function getAllAscenseurs(): Ascenseur[] {
-  return [...ascenseurs];
+  return [...magasin.ascenseurs];
 }
 export function getAscenseurById(id: string): Ascenseur | undefined {
   return obtenirIndexes().ascenseurs.byId.get(id);
@@ -343,21 +407,21 @@ export function getAscenseursByTourneeId(tourneeId: string): Ascenseur[] {
   return [...(obtenirIndexes().ascenseurs.byTourneeId.get(tourneeId) ?? [])];
 }
 export function addAscenseur(ascenseur: Ascenseur): void {
-  ascenseurs.push(ascenseur);
+  magasin.ascenseurs.push(ascenseur);
   invaliderIndexes();
 }
 export function updateAscenseur(ascenseur: Ascenseur): void {
-  const index = ascenseurs.findIndex((a) => a.id === ascenseur.id);
-  if (index !== -1) ascenseurs[index] = ascenseur;
+  const index = magasin.ascenseurs.findIndex((a) => a.id === ascenseur.id);
+  if (index !== -1) magasin.ascenseurs[index] = ascenseur;
   invaliderIndexes();
 }
 export function deleteAscenseur(id: string): void {
-  ascenseurs = ascenseurs.filter((a) => a.id !== id);
+  magasin.ascenseurs = magasin.ascenseurs.filter((a) => a.id !== id);
   invaliderIndexes();
 }
 
 export function getAllEntreesJournalModification(): EntreeJournalModification[] {
-  return [...entreesJournalModification].sort((a, b) => new Date(b.dateModification).getTime() - new Date(a.dateModification).getTime());
+  return [...magasin.entreesJournalModification].sort((a, b) => new Date(b.dateModification).getTime() - new Date(a.dateModification).getTime());
 }
 export function getEntreesJournalModificationByAscenseurId(ascenseurId: string): EntreeJournalModification[] {
   return [...(obtenirIndexes().entreesJournalModification.byAscenseurId.get(ascenseurId) ?? [])].sort(
@@ -365,7 +429,7 @@ export function getEntreesJournalModificationByAscenseurId(ascenseurId: string):
   );
 }
 export function addEntreeJournalModification(entree: EntreeJournalModification): void {
-  entreesJournalModification.push(entree);
+  magasin.entreesJournalModification.push(entree);
   invaliderIndexes();
 }
 
@@ -374,18 +438,18 @@ export function addEntreeJournalModification(entree: EntreeJournalModification):
 // ============================================================================
 
 export function getAllClients(): Client[] {
-  return [...clients];
+  return [...magasin.clients];
 }
 export function getClientById(id: string): Client | undefined {
   return obtenirIndexes().clients.byId.get(id);
 }
 export function addClient(client: Client): void {
-  clients.push(client);
+  magasin.clients.push(client);
   invaliderIndexes();
 }
 export function updateClient(client: Client): void {
-  const index = clients.findIndex((c) => c.id === client.id);
-  if (index !== -1) clients[index] = client;
+  const index = magasin.clients.findIndex((c) => c.id === client.id);
+  if (index !== -1) magasin.clients[index] = client;
   invaliderIndexes();
 }
 export function getResponsablesByClientId(clientId: string): ResponsableClient[] {
@@ -396,7 +460,7 @@ export function getResponsableById(clientId: string, responsableId: string): Res
 }
 
 export function getAllContrats(): Contrat[] {
-  return [...contrats];
+  return [...magasin.contrats];
 }
 export function getContratById(id: string): Contrat | undefined {
   return obtenirIndexes().contrats.byId.get(id);
@@ -408,17 +472,17 @@ export function getContratsByParcId(parcId: string): Contrat[] {
   return [...(obtenirIndexes().contrats.byParcId.get(parcId) ?? [])];
 }
 export function addContrat(contrat: Contrat): void {
-  contrats.push(contrat);
+  magasin.contrats.push(contrat);
   invaliderIndexes();
 }
 export function updateContrat(contrat: Contrat): void {
-  const index = contrats.findIndex((c) => c.id === contrat.id);
-  if (index !== -1) contrats[index] = contrat;
+  const index = magasin.contrats.findIndex((c) => c.id === contrat.id);
+  if (index !== -1) magasin.contrats[index] = contrat;
   invaliderIndexes();
 }
 
 export function getAllParcs(): ParcAscenseurs[] {
-  return [...parcs];
+  return [...magasin.parcs];
 }
 export function getParcById(id: string): ParcAscenseurs | undefined {
   return obtenirIndexes().parcs.byId.get(id);
@@ -430,17 +494,17 @@ export function getParcsBySecteurId(secteurId: string): ParcAscenseurs[] {
   return [...(obtenirIndexes().parcs.bySecteurId.get(secteurId) ?? [])];
 }
 export function addParc(parc: ParcAscenseurs): void {
-  parcs.push(parc);
+  magasin.parcs.push(parc);
   invaliderIndexes();
 }
 export function updateParc(parc: ParcAscenseurs): void {
-  const index = parcs.findIndex((p) => p.id === parc.id);
-  if (index !== -1) parcs[index] = parc;
+  const index = magasin.parcs.findIndex((p) => p.id === parc.id);
+  if (index !== -1) magasin.parcs[index] = parc;
   invaliderIndexes();
 }
 export function deleteParc(id: string): void {
-  parcs = parcs.filter((p) => p.id !== id);
-  ascenseurs = ascenseurs.filter((a) => a.parcId !== id);
+  magasin.parcs = magasin.parcs.filter((p) => p.id !== id);
+  magasin.ascenseurs = magasin.ascenseurs.filter((a) => a.parcId !== id);
   invaliderIndexes();
 }
 
@@ -449,7 +513,7 @@ export function deleteParc(id: string): void {
 // ============================================================================
 
 export function getAllInterventions(): Intervention[] {
-  return [...interventions];
+  return [...magasin.interventions];
 }
 export function getInterventionById(id: string): Intervention | undefined {
   return obtenirIndexes().interventions.byId.get(id);
@@ -470,17 +534,17 @@ export function getInterventionsByStatut(statut: StatutIntervention): Interventi
   return [...(obtenirIndexes().interventions.byStatut.get(statut) ?? [])];
 }
 export function addIntervention(intervention: Intervention): void {
-  interventions.push(intervention);
+  magasin.interventions.push(intervention);
   invaliderIndexes();
 }
 export function updateIntervention(intervention: Intervention): void {
-  const index = interventions.findIndex((i) => i.id === intervention.id);
-  if (index !== -1) interventions[index] = intervention;
+  const index = magasin.interventions.findIndex((i) => i.id === intervention.id);
+  if (index !== -1) magasin.interventions[index] = intervention;
   invaliderIndexes();
 }
 
 export function getAllTickets(): Ticket[] {
-  return [...tickets];
+  return [...magasin.tickets];
 }
 export function getTicketById(id: string): Ticket | undefined {
   return obtenirIndexes().tickets.byId.get(id);
@@ -497,17 +561,17 @@ export function getTicketsNonRapproches(): Ticket[] {
   return [...(obtenirIndexes().tickets.byStatut.get(StatutTicket.NON_RAPPROCHE) ?? [])];
 }
 export function addTicket(ticket: Ticket): void {
-  tickets.push(ticket);
+  magasin.tickets.push(ticket);
   invaliderIndexes();
 }
 export function updateTicket(ticket: Ticket): void {
-  const index = tickets.findIndex((t) => t.id === ticket.id);
-  if (index !== -1) tickets[index] = ticket;
+  const index = magasin.tickets.findIndex((t) => t.id === ticket.id);
+  if (index !== -1) magasin.tickets[index] = ticket;
   invaliderIndexes();
 }
 
 export function getAllReaffectations(): Reaffectation[] {
-  return [...reaffectations];
+  return [...magasin.reaffectations];
 }
 export function getReaffectationsByCible(cibleType: TypeCiblePlanning, cibleId: string): Reaffectation[] {
   const cle = `${cibleType}:${cibleId}`;
@@ -516,7 +580,7 @@ export function getReaffectationsByCible(cibleType: TypeCiblePlanning, cibleId: 
   );
 }
 export function addReaffectation(reaffectation: Reaffectation): void {
-  reaffectations.push(reaffectation);
+  magasin.reaffectations.push(reaffectation);
   invaliderIndexes();
 }
 
@@ -528,10 +592,8 @@ export function addReaffectation(reaffectation: Reaffectation): void {
  * liés, et mise en cache. S'arrête au statut courant : ne rejoue jamais une
  * étape que l'intervention n'a pas encore atteinte.
  */
-const cacheEtapesIntervention = new Map<string, EtapeIntervention[]>();
-
 export function getEtapesInterventionParId(interventionId: string): EtapeIntervention[] {
-  const cache = cacheEtapesIntervention.get(interventionId);
+  const cache = magasin.cacheEtapesIntervention.get(interventionId);
   if (cache) return cache;
 
   const intervention = getInterventionById(interventionId);
@@ -539,7 +601,7 @@ export function getEtapesInterventionParId(interventionId: string): EtapeInterve
 
   const ticketsIntervention = getTicketsByInterventionId(interventionId);
   const reaffectationsIntervention = getReaffectationsByCible(TypeCiblePlanning.INTERVENTION, interventionId);
-  const rapportsIntervention = rapports
+  const rapportsIntervention = magasin.rapports
     .filter((r) => r.interventionId === interventionId)
     .sort((a, b) => (a.numeroPassageIntervention ?? 0) - (b.numeroPassageIntervention ?? 0));
 
@@ -600,7 +662,7 @@ export function getEtapesInterventionParId(interventionId: string): EtapeInterve
   }
 
   etapes.sort((a, b) => new Date(a.dateHeure).getTime() - new Date(b.dateHeure).getTime());
-  cacheEtapesIntervention.set(interventionId, etapes);
+  magasin.cacheEtapesIntervention.set(interventionId, etapes);
   return etapes;
 }
 
@@ -609,7 +671,7 @@ export function getEtapesInterventionParId(interventionId: string): EtapeInterve
 // ============================================================================
 
 export function getAllRapports(): Rapport[] {
-  return [...rapports];
+  return [...magasin.rapports];
 }
 export function getRapportById(id: string): Rapport | undefined {
   return obtenirIndexes().rapports.byId.get(id);
@@ -629,12 +691,12 @@ export function getRapportsByTechnicienId(technicienId: string): Rapport[] {
   return [...(obtenirIndexes().rapports.byTechnicienId.get(technicienId) ?? [])];
 }
 export function addRapport(rapport: Rapport): void {
-  rapports.push(rapport);
+  magasin.rapports.push(rapport);
   invaliderIndexes();
 }
 export function updateRapport(rapport: Rapport): void {
-  const index = rapports.findIndex((r) => r.id === rapport.id);
-  if (index !== -1) rapports[index] = rapport;
+  const index = magasin.rapports.findIndex((r) => r.id === rapport.id);
+  if (index !== -1) magasin.rapports[index] = rapport;
   invaliderIndexes();
 }
 
@@ -644,7 +706,7 @@ export function getRapportSynthetique(ascenseurId: string, index: number): Rappo
 }
 
 export function getAllPhotosRapport(): PhotoRapport[] {
-  return [...photosRapport];
+  return [...magasin.photosRapport];
 }
 export function getPhotoRapportById(id: string): PhotoRapport | undefined {
   return obtenirIndexes().photosRapport.byId.get(id);
@@ -656,7 +718,7 @@ export function getPhotosByReserveId(reserveCtqId: string): PhotoRapport[] {
   return [...(obtenirIndexes().photosRapport.byReserveId.get(reserveCtqId) ?? [])];
 }
 export function addPhotoRapport(photo: PhotoRapport): void {
-  photosRapport.push(photo);
+  magasin.photosRapport.push(photo);
   invaliderIndexes();
 }
 
@@ -691,7 +753,7 @@ export function getReglesObligationPhotos(): RegleObligationPhotos[] {
 // ============================================================================
 
 export function getAllMaintenances(): Maintenance[] {
-  return [...maintenances];
+  return [...magasin.maintenances];
 }
 export function getMaintenanceById(id: string): Maintenance | undefined {
   return obtenirIndexes().maintenances.byId.get(id);
@@ -709,12 +771,12 @@ export function getMaintenancesByContratId(contratId: string): Maintenance[] {
   return [...(obtenirIndexes().maintenances.byContratId.get(contratId) ?? [])];
 }
 export function addMaintenance(maintenance: Maintenance): void {
-  maintenances.push(maintenance);
+  magasin.maintenances.push(maintenance);
   invaliderIndexes();
 }
 export function updateMaintenance(maintenance: Maintenance): void {
-  const index = maintenances.findIndex((m) => m.id === maintenance.id);
-  if (index !== -1) maintenances[index] = maintenance;
+  const index = magasin.maintenances.findIndex((m) => m.id === maintenance.id);
+  if (index !== -1) magasin.maintenances[index] = maintenance;
   invaliderIndexes();
 }
 
@@ -727,23 +789,23 @@ export function getAllHistoriqueMaintenance(): HistoriqueMaintenanceAgregat[] {
 }
 
 export function getAllTypesMaintenanceRef(): TypeMaintenanceRef[] {
-  return [...typesMaintenanceRef];
+  return [...magasin.typesMaintenanceRef];
 }
 export function getTypeMaintenanceRefById(id: string): TypeMaintenanceRef | undefined {
   return obtenirIndexes().typesMaintenanceRef.byId.get(id);
 }
 export function getAllCausesPanneRef(): CausePanneRef[] {
-  return [...causesPanneRef];
+  return [...magasin.causesPanneRef];
 }
 
 export function getAllAbsencesTechnicien(): AbsenceTechnicien[] {
-  return [...absencesTechnicien];
+  return [...magasin.absencesTechnicien];
 }
 export function getAbsencesByTechnicienId(technicienId: string): AbsenceTechnicien[] {
   return [...(obtenirIndexes().absencesTechnicien.byTechnicienId.get(technicienId) ?? [])];
 }
 export function addAbsenceTechnicien(absence: AbsenceTechnicien): void {
-  absencesTechnicien.push(absence);
+  magasin.absencesTechnicien.push(absence);
   invaliderIndexes();
 }
 
@@ -752,14 +814,14 @@ export function addAbsenceTechnicien(absence: AbsenceTechnicien): void {
 // ============================================================================
 
 export function getAllBureauxEtudes(): BureauEtudes[] {
-  return [...bureauxEtudes];
+  return [...magasin.bureauxEtudes];
 }
 export function getBureauEtudesById(id: string): BureauEtudes | undefined {
   return obtenirIndexes().bureauxEtudes.byId.get(id);
 }
 
 export function getAllControlesCTQ(): ControleCTQ[] {
-  return [...controlesCTQ];
+  return [...magasin.controlesCTQ];
 }
 export function getControleCTQById(id: string): ControleCTQ | undefined {
   return obtenirIndexes().controlesCTQ.byId.get(id);
@@ -771,17 +833,17 @@ export function getControlesCTQByClientId(clientId: string): ControleCTQ[] {
   return [...(obtenirIndexes().controlesCTQ.byClientId.get(clientId) ?? [])];
 }
 export function addControleCTQ(controle: ControleCTQ): void {
-  controlesCTQ.push(controle);
+  magasin.controlesCTQ.push(controle);
   invaliderIndexes();
 }
 export function updateControleCTQ(controle: ControleCTQ): void {
-  const index = controlesCTQ.findIndex((c) => c.id === controle.id);
-  if (index !== -1) controlesCTQ[index] = controle;
+  const index = magasin.controlesCTQ.findIndex((c) => c.id === controle.id);
+  if (index !== -1) magasin.controlesCTQ[index] = controle;
   invaliderIndexes();
 }
 
 export function getAllReservesCTQ(): ReserveCTQ[] {
-  return [...reservesCTQ];
+  return [...magasin.reservesCTQ];
 }
 export function getReserveCTQById(id: string): ReserveCTQ | undefined {
   return obtenirIndexes().reservesCTQ.byId.get(id);
@@ -796,17 +858,17 @@ export function getReservesCTQByTechnicienId(technicienId: string): ReserveCTQ[]
   return [...(obtenirIndexes().reservesCTQ.byTechnicienId.get(technicienId) ?? [])];
 }
 export function addReserveCTQ(reserve: ReserveCTQ): void {
-  reservesCTQ.push(reserve);
+  magasin.reservesCTQ.push(reserve);
   invaliderIndexes();
 }
 export function updateReserveCTQ(reserve: ReserveCTQ): void {
-  const index = reservesCTQ.findIndex((r) => r.id === reserve.id);
-  if (index !== -1) reservesCTQ[index] = reserve;
+  const index = magasin.reservesCTQ.findIndex((r) => r.id === reserve.id);
+  if (index !== -1) magasin.reservesCTQ[index] = reserve;
   invaliderIndexes();
 }
 
 export function getAllEvenementsReserve(): EvenementReserve[] {
-  return [...evenementsReserve];
+  return [...magasin.evenementsReserve];
 }
 export function getEvenementsByReserveId(reserveId: string): EvenementReserve[] {
   return [...(obtenirIndexes().evenementsReserve.byReserveId.get(reserveId) ?? [])].sort(
@@ -814,7 +876,7 @@ export function getEvenementsByReserveId(reserveId: string): EvenementReserve[] 
   );
 }
 export function addEvenementReserve(evenement: EvenementReserve): void {
-  evenementsReserve.push(evenement);
+  magasin.evenementsReserve.push(evenement);
   invaliderIndexes();
 }
 
@@ -823,7 +885,7 @@ export function addEvenementReserve(evenement: EvenementReserve): void {
 // ============================================================================
 
 export function getAllUtilisateurs(): Utilisateur[] {
-  return [...utilisateurs];
+  return [...magasin.utilisateurs];
 }
 export function getUtilisateurById(id: string): Utilisateur | undefined {
   return obtenirIndexes().utilisateurs.byId.get(id);
@@ -841,12 +903,12 @@ export function getUtilisateursByClientId(clientId: string): Utilisateur[] {
   return [...(obtenirIndexes().utilisateurs.byClientId.get(clientId) ?? [])];
 }
 export function addUtilisateur(utilisateur: Utilisateur): void {
-  utilisateurs.push(utilisateur);
+  magasin.utilisateurs.push(utilisateur);
   invaliderIndexes();
 }
 export function updateUtilisateur(utilisateur: Utilisateur): void {
-  const index = utilisateurs.findIndex((u) => u.id === utilisateur.id);
-  if (index !== -1) utilisateurs[index] = utilisateur;
+  const index = magasin.utilisateurs.findIndex((u) => u.id === utilisateur.id);
+  if (index !== -1) magasin.utilisateurs[index] = utilisateur;
   invaliderIndexes();
 }
 
@@ -865,19 +927,19 @@ export function getAllConfigurationsNotification(): ConfigurationNotification[] 
 }
 
 export function getAllIntegrationsExternes(): IntegrationExterne[] {
-  return [...integrationsExternes];
+  return [...magasin.integrationsExternes];
 }
 export function getIntegrationExterneById(id: string): IntegrationExterne | undefined {
   return obtenirIndexes().integrationsExternes.byId.get(id);
 }
 export function updateIntegrationExterne(integration: IntegrationExterne): void {
-  const index = integrationsExternes.findIndex((i) => i.id === integration.id);
-  if (index !== -1) integrationsExternes[index] = integration;
+  const index = magasin.integrationsExternes.findIndex((i) => i.id === integration.id);
+  if (index !== -1) magasin.integrationsExternes[index] = integration;
   invaliderIndexes();
 }
 
 export function getAllJournalEchangesIntegration(): JournalEchangeIntegration[] {
-  return [...journalEchangesIntegration];
+  return [...magasin.journalEchangesIntegration];
 }
 export function getJournalEchangesByIntegrationId(integrationId: string): JournalEchangeIntegration[] {
   return [...(obtenirIndexes().journalEchangesIntegration.byIntegrationId.get(integrationId) ?? [])].sort(
@@ -890,7 +952,7 @@ export function getJournalEchangesByIntegrationId(integrationId: string): Journa
 // ============================================================================
 
 export function getAllSessionsTechnicien(): SessionTechnicien[] {
-  return [...sessionsTechnicien];
+  return [...magasin.sessionsTechnicien];
 }
 export function getSessionTechnicienById(id: string): SessionTechnicien | undefined {
   return obtenirIndexes().sessionsTechnicien.byId.get(id);
@@ -899,17 +961,17 @@ export function getSessionActiveDuTechnicien(technicienId: string): SessionTechn
   return obtenirIndexes().sessionsTechnicien.byTechnicienId.get(technicienId)?.[0];
 }
 export function addSessionTechnicien(session: SessionTechnicien): void {
-  sessionsTechnicien.push(session);
+  magasin.sessionsTechnicien.push(session);
   invaliderIndexes();
 }
 export function updateSessionTechnicien(session: SessionTechnicien): void {
-  const index = sessionsTechnicien.findIndex((s) => s.id === session.id);
-  if (index !== -1) sessionsTechnicien[index] = session;
+  const index = magasin.sessionsTechnicien.findIndex((s) => s.id === session.id);
+  if (index !== -1) magasin.sessionsTechnicien[index] = session;
   invaliderIndexes();
 }
 
 export function getAllElementsFileSynchronisation(): ElementFileSynchronisation[] {
-  return [...elementsFileSynchronisation];
+  return [...magasin.elementsFileSynchronisation];
 }
 export function getElementsFileSynchronisationByTechnicienId(technicienId: string): ElementFileSynchronisation[] {
   return [...(obtenirIndexes().elementsFileSynchronisation.byTechnicienId.get(technicienId) ?? [])].sort(
@@ -920,12 +982,12 @@ export function getElementFileSynchronisationById(id: string): ElementFileSynchr
   return obtenirIndexes().elementsFileSynchronisation.byId.get(id);
 }
 export function addElementFileSynchronisation(element: ElementFileSynchronisation): void {
-  elementsFileSynchronisation.push(element);
+  magasin.elementsFileSynchronisation.push(element);
   invaliderIndexes();
 }
 export function updateElementFileSynchronisation(element: ElementFileSynchronisation): void {
-  const index = elementsFileSynchronisation.findIndex((e) => e.id === element.id);
-  if (index !== -1) elementsFileSynchronisation[index] = element;
+  const index = magasin.elementsFileSynchronisation.findIndex((e) => e.id === element.id);
+  if (index !== -1) magasin.elementsFileSynchronisation[index] = element;
   invaliderIndexes();
 }
 
@@ -933,7 +995,7 @@ export function getAppareilsTelechargesByTechnicienId(technicienId: string): App
   return [...(obtenirIndexes().appareilsTelechargesLocalement.byTechnicienId.get(technicienId) ?? [])];
 }
 export function addAppareilTelechargeLocalement(entree: AppareilTelechargeLocalement): void {
-  appareilsTelechargesLocalement.push(entree);
+  magasin.appareilsTelechargesLocalement.push(entree);
   invaliderIndexes();
 }
 
@@ -944,9 +1006,9 @@ export function getEtatPTIByTechnicienId(technicienId: string): EtatPTITechnicie
   return obtenirIndexes().etatsPTITechnicien.byTechnicienId.get(technicienId);
 }
 export function updateEtatPTITechnicien(etat: EtatPTITechnicien): void {
-  const index = etatsPTITechnicien.findIndex((e) => e.technicienId === etat.technicienId);
-  if (index !== -1) etatsPTITechnicien[index] = etat;
-  else etatsPTITechnicien.push(etat);
+  const index = magasin.etatsPTITechnicien.findIndex((e) => e.technicienId === etat.technicienId);
+  if (index !== -1) magasin.etatsPTITechnicien[index] = etat;
+  else magasin.etatsPTITechnicien.push(etat);
   invaliderIndexes();
 }
 
@@ -955,21 +1017,21 @@ export function updateEtatPTITechnicien(etat: EtatPTITechnicien): void {
 // ============================================================================
 
 export function getAllPositionsTechnicien(): PositionTechnicien[] {
-  return [...positionsTechnicien];
+  return [...magasin.positionsTechnicien];
 }
 export function getPositionByTechnicienId(technicienId: string): PositionTechnicien | undefined {
   return obtenirIndexes().positionsTechnicien.byTechnicienId.get(technicienId);
 }
 
 export function getAllZonesGeographiques(): ZoneGeographique[] {
-  return [...zonesGeographiques];
+  return [...magasin.zonesGeographiques];
 }
 export function getZoneGeographiqueById(id: string): ZoneGeographique | undefined {
   return obtenirIndexes().zonesGeographiques.byId.get(id);
 }
 
 export function getAllTourneesDuJour(): TourneeDuJour[] {
-  return [...tourneesDuJour];
+  return [...magasin.tourneesDuJour];
 }
 export function getTourneeDuJourByTechnicienId(technicienId: string): TourneeDuJour | undefined {
   return obtenirIndexes().tourneesDuJour.byTechnicienId.get(technicienId);
@@ -982,7 +1044,7 @@ export function getTourneeDuJourByTechnicienId(technicienId: string): TourneeDuJ
  * rafraîchissement sans setInterval serveur ni websocket.
  */
 export function getAllTachesAsynchrones(): TacheAsynchrone[] {
-  return tachesAsynchrones.map((t) => calculerProgressionTache(t));
+  return magasin.tachesAsynchrones.map((t) => calculerProgressionTache(t));
 }
 export function getTacheAsynchroneById(id: string): TacheAsynchrone | undefined {
   const tache = obtenirIndexes().tachesAsynchrones.byId.get(id);
@@ -992,12 +1054,12 @@ export function getTachesAsynchronesByUtilisateurId(utilisateurId: string): Tach
   return (obtenirIndexes().tachesAsynchrones.byUtilisateurId.get(utilisateurId) ?? []).map((t) => calculerProgressionTache(t));
 }
 export function addTacheAsynchrone(tache: TacheAsynchrone): void {
-  tachesAsynchrones.push(tache);
+  magasin.tachesAsynchrones.push(tache);
   invaliderIndexes();
 }
 export function updateTacheAsynchrone(tache: TacheAsynchrone): void {
-  const index = tachesAsynchrones.findIndex((t) => t.id === tache.id);
-  if (index !== -1) tachesAsynchrones[index] = tache;
+  const index = magasin.tachesAsynchrones.findIndex((t) => t.id === tache.id);
+  if (index !== -1) magasin.tachesAsynchrones[index] = tache;
   invaliderIndexes();
 }
 
@@ -1010,7 +1072,7 @@ function calculerProgressionTache(tache: TacheAsynchrone): TacheAsynchrone {
 }
 
 export function getAllNotifications(): Notification[] {
-  return [...notifications].sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime());
+  return [...magasin.notifications].sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime());
 }
 export function getNotificationById(id: string): Notification | undefined {
   return obtenirIndexes().notifications.byId.get(id);
@@ -1026,11 +1088,11 @@ export function getNotificationsByRole(role: RoleUtilisateur): Notification[] {
   );
 }
 export function addNotification(notification: Notification): void {
-  notifications.push(notification);
+  magasin.notifications.push(notification);
   invaliderIndexes();
 }
 export function marquerNotificationLue(id: string): void {
-  const notif = notifications.find((n) => n.id === id);
+  const notif = magasin.notifications.find((n) => n.id === id);
   if (notif && !notif.lu) {
     notif.lu = true;
     notif.dateLecture = new Date().toISOString();
@@ -1038,7 +1100,7 @@ export function marquerNotificationLue(id: string): void {
 }
 
 export function getAllEntreesAudit(): EntreeAudit[] {
-  return [...entreesAudit].sort((a, b) => new Date(b.dateHeure).getTime() - new Date(a.dateHeure).getTime());
+  return [...magasin.entreesAudit].sort((a, b) => new Date(b.dateHeure).getTime() - new Date(a.dateHeure).getTime());
 }
 export function getEntreesAuditByEntiteId(entiteId: string): EntreeAudit[] {
   return [...(obtenirIndexes().entreesAudit.byEntiteId.get(entiteId) ?? [])].sort(
@@ -1046,7 +1108,7 @@ export function getEntreesAuditByEntiteId(entiteId: string): EntreeAudit[] {
   );
 }
 export function addEntreeAudit(entree: EntreeAudit): void {
-  entreesAudit.push(entree);
+  magasin.entreesAudit.push(entree);
   invaliderIndexes();
 }
 
@@ -1079,7 +1141,7 @@ export function getStatistiquesParc(parcId: string): StatistiquesParc {
 
 /** Statistiques de tous les parcs. */
 export function getAllStatistiquesParc(): StatistiquesParc[] {
-  return parcs.map((parc) => getStatistiquesParc(parc.id));
+  return magasin.parcs.map((parc) => getStatistiquesParc(parc.id));
 }
 
 // ============================================================================
@@ -1091,44 +1153,44 @@ export function getAllStatistiquesParc(): StatistiquesParc[] {
 // volontaire et rare (entre deux ateliers), jamais appelée automatiquement.
 
 export function reinitialiserDonneesDemo(): void {
-  secteursGeographiques = [...initialSecteursGeographiques];
-  techniciens = [...initialTechniciens];
-  tournees = [...initialTournees];
-  definitionsSLA = [...initialDefinitionsSLA];
-  clients = [...initialClients];
-  contrats = [...initialContrats];
-  parcs = [...initialParcs];
-  ascenseurs = [...initialAscenseurs];
-  entreesJournalModification = [...initialEntreesJournalModification];
-  utilisateurs = [...initialUtilisateurs];
-  typesMaintenanceRef = [...initialTypesMaintenanceRef];
-  causesPanneRef = [...initialCausesPanneRef];
-  maintenances = [...initialMaintenances];
-  interventions = [...initialInterventions];
-  tickets = [...initialTickets];
-  reaffectations = [...initialReaffectations];
-  absencesTechnicien = [...initialAbsencesTechnicien];
-  photosRapport = [...initialPhotosRapport];
-  rapports = [...initialRapports];
-  bureauxEtudes = [...initialBureauxEtudes];
-  controlesCTQ = [...initialControlesCTQ];
-  reservesCTQ = [...initialReservesCTQ];
-  evenementsReserve = [...initialEvenementsReserve];
-  sessionsTechnicien = [...initialSessionsTechnicien];
-  elementsFileSynchronisation = [...initialElementsFileSynchronisation];
-  appareilsTelechargesLocalement = [...initialAppareilsTelechargesLocalement];
-  etatsPTITechnicien = [...initialEtatsPTITechnicien];
-  positionsTechnicien = [...initialPositionsTechnicien];
-  zonesGeographiques = [...initialZonesGeographiques];
-  tourneesDuJour = [...initialTourneesDuJour];
-  tachesAsynchrones = [...initialTachesAsynchrones];
-  notifications = [...initialNotifications];
-  entreesAudit = [...initialEntreesAudit];
-  integrationsExternes = [...initialIntegrationsExternes];
-  journalEchangesIntegration = [...initialJournalEchangesIntegration];
+  magasin.secteursGeographiques = [...initialSecteursGeographiques];
+  magasin.techniciens = [...initialTechniciens];
+  magasin.tournees = [...initialTournees];
+  magasin.definitionsSLA = [...initialDefinitionsSLA];
+  magasin.clients = [...initialClients];
+  magasin.contrats = [...initialContrats];
+  magasin.parcs = [...initialParcs];
+  magasin.ascenseurs = [...initialAscenseurs];
+  magasin.entreesJournalModification = [...initialEntreesJournalModification];
+  magasin.utilisateurs = [...initialUtilisateurs];
+  magasin.typesMaintenanceRef = [...initialTypesMaintenanceRef];
+  magasin.causesPanneRef = [...initialCausesPanneRef];
+  magasin.maintenances = [...initialMaintenances];
+  magasin.interventions = [...initialInterventions];
+  magasin.tickets = [...initialTickets];
+  magasin.reaffectations = [...initialReaffectations];
+  magasin.absencesTechnicien = [...initialAbsencesTechnicien];
+  magasin.photosRapport = [...initialPhotosRapport];
+  magasin.rapports = [...initialRapports];
+  magasin.bureauxEtudes = [...initialBureauxEtudes];
+  magasin.controlesCTQ = [...initialControlesCTQ];
+  magasin.reservesCTQ = [...initialReservesCTQ];
+  magasin.evenementsReserve = [...initialEvenementsReserve];
+  magasin.sessionsTechnicien = [...initialSessionsTechnicien];
+  magasin.elementsFileSynchronisation = [...initialElementsFileSynchronisation];
+  magasin.appareilsTelechargesLocalement = [...initialAppareilsTelechargesLocalement];
+  magasin.etatsPTITechnicien = [...initialEtatsPTITechnicien];
+  magasin.positionsTechnicien = [...initialPositionsTechnicien];
+  magasin.zonesGeographiques = [...initialZonesGeographiques];
+  magasin.tourneesDuJour = [...initialTourneesDuJour];
+  magasin.tachesAsynchrones = [...initialTachesAsynchrones];
+  magasin.notifications = [...initialNotifications];
+  magasin.entreesAudit = [...initialEntreesAudit];
+  magasin.integrationsExternes = [...initialIntegrationsExternes];
+  magasin.journalEchangesIntegration = [...initialJournalEchangesIntegration];
 
   rafraichirFraicheurScenarios();
-  cacheEtapesIntervention.clear();
+  magasin.cacheEtapesIntervention.clear();
   invaliderIndexes();
 }
 
@@ -1169,7 +1231,7 @@ export function rafraichirFraicheurScenarios(): void {
   const decalageParIntervention = new Map<string, number>();
   let rang = 0;
 
-  interventions = interventions.map((intervention) => {
+  magasin.interventions = magasin.interventions.map((intervention) => {
     if (intervention.motif !== MotifIntervention.PERSONNE_BLOQUEE) return intervention;
     if (!aucunJalonApresCreation(intervention)) return intervention;
     const ancienneteMinutes = 5 + ((rang++ * 7) % 40); // étalées entre 5 et 44 minutes, de façon déterministe
@@ -1186,7 +1248,7 @@ export function rafraichirFraicheurScenarios(): void {
   // Un ticket rattaché plus tard (2e signalement) ne doit pas se retrouver dans le futur après décalage.
   const decalerSansDepasserMaintenant = (dateISO: string, decalageMs: number): string =>
     new Date(Math.min(new Date(dateISO).getTime() + decalageMs, maintenantMs)).toISOString();
-  tickets = tickets.map((ticket) => {
+  magasin.tickets = magasin.tickets.map((ticket) => {
     const decalageMs = ticket.interventionId ? decalageParIntervention.get(ticket.interventionId) : undefined;
     if (decalageMs === undefined) return ticket;
     return {
@@ -1196,7 +1258,7 @@ export function rafraichirFraicheurScenarios(): void {
     };
   });
 
-  evenementsReserve = evenementsReserve.map((evenement) =>
+  magasin.evenementsReserve = magasin.evenementsReserve.map((evenement) =>
     new Date(evenement.dateHeure).getTime() > maintenant.getTime()
       ? { ...evenement, dateHeure: maintenant.toISOString() }
       : evenement

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   getDateDemo,
   getAllInterventions,
@@ -94,5 +94,26 @@ describe('rafraichirFraicheurScenarios', () => {
     const evenement = getAllEvenementsReserve().find((e) => e.id === 'evt-test-futur');
     expect(evenement).toBeDefined();
     expect(new Date(evenement!.dateHeure).getTime()).toBeLessThanOrEqual(getDateDemo().getTime());
+  });
+});
+
+describe("partage d'état entre « couches » Next.js (globalThis)", () => {
+  it('une mutation faite via une première instance du module reste visible après réévaluation complète du module', async () => {
+    const store1 = await import('./store');
+    const [premiere] = store1.getAllInterventions();
+    const autreStatut =
+      premiere.statut === StatutIntervention.CLOTURE ? StatutIntervention.A_AFFECTER : StatutIntervention.CLOTURE;
+    store1.updateIntervention({ ...premiere, statut: autreStatut });
+
+    // vi.resetModules() force une réévaluation complète de data/store.ts (et de
+    // data/mockData.ts) — exactement ce que fait Next.js en donnant à une
+    // Server Action une instance de module séparée de celle des Server
+    // Components. globalThis, lui, survit à cette réévaluation : c'est la
+    // condition que ce test vérifie.
+    vi.resetModules();
+    const store2 = await import('./store');
+    const relue = store2.getAllInterventions().find((i) => i.id === premiere.id);
+
+    expect(relue?.statut).toBe(autreStatut);
   });
 });
