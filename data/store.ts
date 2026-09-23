@@ -259,6 +259,22 @@ function obtenirIndexes(): Indexes {
 }
 
 // ============================================================================
+// HORLOGE DE DÉMONSTRATION
+// ============================================================================
+//
+// Heure "actuelle" de la démonstration — seam unique utilisé par tous les
+// calculs dérivés qui dépendent de l'heure courante (retards, SLA, urgences,
+// score de risque). Vaut l'heure réelle aujourd'hui ; conservé comme fonction
+// (et non un accès direct à `Date`) pour qu'une future figure du temps de
+// démonstration n'ait qu'un seul endroit à modifier plutôt que les ~15 points
+// de lecture qui en dépendent (voir
+// docs/superpowers/plans/2026-09-23-manelift-fondations-demo.md).
+
+export function getDateDemo(): Date {
+  return new Date();
+}
+
+// ============================================================================
 // 1. APPAREILS & PARC
 // ============================================================================
 
