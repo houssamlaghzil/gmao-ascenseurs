@@ -41,11 +41,15 @@ Une exploration du dépôt (4 agents en parallèle + lecture directe de `data/st
 - Toute nouvelle route/action doit avoir un état vide, un état d'erreur et un état de succès — un bouton de démonstration qui mène à une page blanche est un échec de recette (critère section 11 de la spec).
 - L'ajout du sélecteur Web/Android ne doit pas rendre `/mobile` incohérent quand on y arrive avec des filtres ou un contexte Web actif (ex. depuis la fiche d'un appareil précis) — clarifier explicitement si le bouton bascule vers le contexte du technicien courant ou vers l'accueil générique.
 
+## Découverte en cours de Phase 1 — partage d'état Server Actions / pages (2026-09-23)
+
+Pendant l'implémentation de la Tâche 4 des fondations, découverte (vérifiée indépendamment dans un environnement isolé) que Next.js 14 compile `data/store.ts` séparément par « couche » (Server Components vs Server Actions) : une mutation faite par une Server Action peut ne pas être visible sur la page qui la lit ensuite, en build de production standalone. C'est un bug **préexistant à ce plan**, affectant potentiellement tous les flux de mutation déjà en place (réattribution, planning, wizards mobile, CTQ, rapports…), pas seulement la réinitialisation de démo. Correctif : stocker l'état mutable de `data/store.ts` sur `globalThis` plutôt que sur des liaisons de module — voir la Tâche 5 du plan de fondations. **Tant que cette tâche n'est pas mergée, aucune phase suivante ne doit supposer qu'une mutation est fiablement visible après un rechargement en environnement de production.**
+
 ## Phases
 
-- [ ] **Phase 1 — Fondations : horloge de démo, réinitialisation, cohérence, découvrabilité Android.**
+- [ ] **Phase 1 — Fondations : horloge de démo, réinitialisation, cohérence, découvrabilité Android, partage d'état réel.**
   Plan détaillé : `docs/superpowers/plans/2026-09-23-manelift-fondations-demo.md` (rédigé, prêt à exécuter).
-  Portée : bandeau maquette global, horloge de démonstration (`getDateDemo()`), action « Réinitialiser la démonstration » (y compris rafraîchissement des scénarios sensibles au temps, ex. alertes « personne bloquée » vieillies par un process longue durée), test de non-régression sur l'indépendance des dates contractuelles de maintenance, et bouton de bascule Web ⇄ Android dans la navigation.
+  Portée : bandeau maquette global, horloge de démonstration (`getDateDemo()`), action « Réinitialiser la démonstration » (y compris rafraîchissement des scénarios sensibles au temps, ex. alertes « personne bloquée » vieillies par un process longue durée), **partage réel de l'état du magasin de données via `globalThis` entre Server Actions et pages (Tâche 5 — voir découverte ci-dessus)**, test de non-régression sur l'indépendance des dates contractuelles de maintenance, et bouton de bascule Web ⇄ Android dans la navigation.
   Définition de faite : `npx vitest run`/`lint`/`tsc --noEmit` verts ; le bandeau est visible sur `/` et `/mobile/accueil` ; cliquer « Réinitialiser la démonstration » restaure le jeu de données et rafraîchit les alertes « personne bloquée » à moins d'une heure ; `/mobile` est atteignable en un clic depuis la barre latérale Web, et inversement.
   Dimensionnement dominant : Opus 5.5 (le magasin de données est un point de convergence partagé par tout le reste de la feuille de route — une erreur ici se propage à toutes les phases suivantes).
 

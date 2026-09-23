@@ -761,7 +761,317 @@ EOF
 
 ---
 
-## Task 5: Test de non-régression — indépendance des dates contractuelles de maintenance
+## Task 5: Partager réellement l'état du magasin de données (`globalThis`)
+
+> **Origine de cette tâche :** découverte pendant l'implémentation de la Tâche 4, vérifiée indépendamment dans un environnement isolé (worktree Git séparé, build de zéro, port dédié) par le contrôleur du plan : dans ce dépôt, Next.js 14 compile `data/store.ts` séparément par « couche » (Server Components vs Server Actions). Deux couches qui importent ce même fichier obtiennent chacune leur **propre instance de module**, donc les liaisons `let` de module ne sont **pas partagées** entre une Server Action et la page qui doit refléter son résultat. Constaté concrètement : une réattribution d'intervention répond 200 sans erreur, mais la page rechargée juste après ne montre aucun changement. C'est un bug **préexistant à ce plan**, présent dans tous les flux de mutation déjà en place (réattribution, planning, wizards mobile, CTQ, rapports…) — pas quelque chose que les Tâches 1 à 4 ont introduit. Documenté côté Next.js : https://github.com/vercel/next.js/issues/76025 et https://github.com/vercel/next.js/issues/74204. Le correctif documenté est de stocker l'état mutable sur `globalThis`, seul objet garanti partagé entre toutes les couches d'un même process Node, plutôt que sur des liaisons de module.
+>
+> Sans cette tâche, la réinitialisation de la Tâche 4 (et toute mutation existante) ne produit aucun effet visible en usage réel — cette tâche doit être considérée comme un prérequis à la clôture effective de la Tâche 4, pas comme une amélioration optionnelle.
+
+**Dimensionnement recommandé : Opus 5.5** (touche l'intégralité du magasin de données partagé, ~39 identifiants et l'ensemble des fonctions du fichier ; erreur ici = régression silencieuse sur tous les flux de mutation existants).
+
+**Files:**
+- Modify: `data/store.ts` (la quasi-totalité du fichier — voir périmètre exact ci-dessous)
+- Modify: `data/store.test.ts`
+
+**Interfaces:**
+- Consumes : rien de nouveau.
+- Produces : aucune nouvelle fonction exportée — les signatures de toutes les fonctions déjà exportées (`getAllX`, `addX`, `updateX`, `getDateDemo`, `getVersionDonnees`, `reinitialiserDonneesDemo`, `rafraichirFraicheurScenarios`, etc.) restent strictement identiques. Seule la source de stockage change, jamais le comportement observable.
+
+### Périmètre exact du déplacement vers `globalThis`
+
+Déplacer **uniquement** les identifiants suivants (tous les `let` de la section « ÉTAT EN MÉMOIRE », plus les trois compteurs/caches de la section « CACHE D'INDEX », plus `cacheEtapesIntervention` qui est un `const` mais dont le **contenu** est muté via `.set()`/`.clear()`) :
+
+```
+secteursGeographiques, techniciens, tournees, definitionsSLA, clients, contrats,
+parcs, ascenseurs, entreesJournalModification, utilisateurs, typesMaintenanceRef,
+causesPanneRef, maintenances, interventions, tickets, reaffectations,
+absencesTechnicien, photosRapport, rapports, bureauxEtudes, controlesCTQ,
+reservesCTQ, evenementsReserve, sessionsTechnicien, elementsFileSynchronisation,
+appareilsTelechargesLocalement, etatsPTITechnicien, positionsTechnicien,
+zonesGeographiques, tourneesDuJour, tachesAsynchrones, notifications,
+entreesAudit, integrationsExternes, journalEchangesIntegration,
+indexesConstruits, versionIndexes, versionIndexesConstruits,
+cacheEtapesIntervention
+```
+
+**Ne pas déplacer** les `const` suivants : `historiqueMaintenanceParAscenseur`, `equipementsReferentiel`, `etatsEquipementReferentiel`, `actionsDiagnosticReferentiel`, `reglesObligationPhotos`, `rapportsAgregatGlobal`, `compteursRapportsParAppareil`, `configurationsPTI`, `rolesDefinitions`, `reglesMetier`, `configurationsNotification` — ce sont des données référentielles jamais réassignées ni mutées en place ; chaque « couche » Next.js peut légitimement en garder sa propre copie identique (même seed déterministe), aucun partage n'est nécessaire.
+
+- [ ] **Step 1 : Écrire le test qui reproduit le bug (il échoue avant le correctif)**
+
+Ajouter à `data/store.test.ts` :
+
+```ts
+import { describe, expect, it, vi } from 'vitest';
+import { StatutIntervention } from '@/domain/types';
+
+describe("partage d'état entre « couches » Next.js (globalThis)", () => {
+  it('une mutation faite via une première instance du module reste visible après réévaluation complète du module', async () => {
+    const store1 = await import('./store');
+    const [premiere] = store1.getAllInterventions();
+    const autreStatut =
+      premiere.statut === StatutIntervention.CLOTURE ? StatutIntervention.A_AFFECTER : StatutIntervention.CLOTURE;
+    store1.updateIntervention({ ...premiere, statut: autreStatut });
+
+    // vi.resetModules() force une réévaluation complète de data/store.ts (et de
+    // data/mockData.ts) — exactement ce que fait Next.js en donnant à une
+    // Server Action une instance de module séparée de celle des Server
+    // Components. globalThis, lui, survit à cette réévaluation : c'est la
+    // condition que ce test vérifie.
+    vi.resetModules();
+    const store2 = await import('./store');
+    const relue = store2.getAllInterventions().find((i) => i.id === premiere.id);
+
+    expect(relue?.statut).toBe(autreStatut);
+  });
+});
+```
+
+- [ ] **Step 2 : Lancer le test, vérifier qu'il échoue pour la bonne raison**
+
+Run: `npx vitest run data/store.test.ts -t "partage d'état"`
+Expected: FAIL — `relue?.statut` vaut le statut **original** de `premiere`, pas `autreStatut` : la seconde instance du module a régénéré des données fraîches depuis `initialInterventions`, la mutation faite sur la première instance a été perdue.
+
+- [ ] **Step 3 : Introduire le magasin partagé sur `globalThis`**
+
+Remplacer l'intégralité du bloc (lignes actuelles ~143 à 188, de `let secteursGeographiques` à `const configurationsNotification`) par une interface `MagasinDonnees`, une fonction `creerMagasinInitial()`, et l'obtention/création paresseuse sur `globalThis` :
+
+```ts
+// ============================================================================
+// MAGASIN PARTAGÉ — stocké sur globalThis (pas sur des liaisons de module)
+// ============================================================================
+//
+// Next.js compile ce module séparément par « couche » (Server Components vs
+// Server Actions) : deux couches qui importent ce même fichier obtiennent
+// chacune leur PROPRE instance de module, donc des liaisons `let` de module
+// ne seraient PAS partagées entre une Server Action et la page qui affiche
+// son résultat (constaté : une réattribution répond 200 mais n'apparaît pas
+// après rechargement — voir Tâche 5 du plan de fondations et
+// https://github.com/vercel/next.js/issues/76025). `globalThis` est le seul
+// objet garanti partagé entre toutes les couches d'un même process Node : on
+// y stocke donc l'unique copie mutable de l'état, une fois pour tout le
+// process.
+
+interface MagasinDonnees {
+  secteursGeographiques: SecteurGeographique[];
+  techniciens: Technicien[];
+  tournees: Tournee[];
+  definitionsSLA: DefinitionSLA[];
+  clients: Client[];
+  contrats: Contrat[];
+  parcs: ParcAscenseurs[];
+  ascenseurs: Ascenseur[];
+  entreesJournalModification: EntreeJournalModification[];
+  utilisateurs: Utilisateur[];
+  typesMaintenanceRef: TypeMaintenanceRef[];
+  causesPanneRef: CausePanneRef[];
+  maintenances: Maintenance[];
+  interventions: Intervention[];
+  tickets: Ticket[];
+  reaffectations: Reaffectation[];
+  absencesTechnicien: AbsenceTechnicien[];
+  photosRapport: PhotoRapport[];
+  rapports: Rapport[];
+  bureauxEtudes: BureauEtudes[];
+  controlesCTQ: ControleCTQ[];
+  reservesCTQ: ReserveCTQ[];
+  evenementsReserve: EvenementReserve[];
+  sessionsTechnicien: SessionTechnicien[];
+  elementsFileSynchronisation: ElementFileSynchronisation[];
+  appareilsTelechargesLocalement: AppareilTelechargeLocalement[];
+  etatsPTITechnicien: EtatPTITechnicien[];
+  positionsTechnicien: PositionTechnicien[];
+  zonesGeographiques: ZoneGeographique[];
+  tourneesDuJour: TourneeDuJour[];
+  tachesAsynchrones: TacheAsynchrone[];
+  notifications: Notification[];
+  entreesAudit: EntreeAudit[];
+  integrationsExternes: IntegrationExterne[];
+  journalEchangesIntegration: JournalEchangeIntegration[];
+  indexesConstruits: Indexes | null;
+  versionIndexes: number;
+  versionIndexesConstruits: number;
+  cacheEtapesIntervention: Map<string, EtapeIntervention[]>;
+}
+
+function creerMagasinInitial(): MagasinDonnees {
+  return {
+    secteursGeographiques: [...initialSecteursGeographiques],
+    techniciens: [...initialTechniciens],
+    tournees: [...initialTournees],
+    definitionsSLA: [...initialDefinitionsSLA],
+    clients: [...initialClients],
+    contrats: [...initialContrats],
+    parcs: [...initialParcs],
+    ascenseurs: [...initialAscenseurs],
+    entreesJournalModification: [...initialEntreesJournalModification],
+    utilisateurs: [...initialUtilisateurs],
+    typesMaintenanceRef: [...initialTypesMaintenanceRef],
+    causesPanneRef: [...initialCausesPanneRef],
+    maintenances: [...initialMaintenances],
+    interventions: [...initialInterventions],
+    tickets: [...initialTickets],
+    reaffectations: [...initialReaffectations],
+    absencesTechnicien: [...initialAbsencesTechnicien],
+    photosRapport: [...initialPhotosRapport],
+    rapports: [...initialRapports],
+    bureauxEtudes: [...initialBureauxEtudes],
+    controlesCTQ: [...initialControlesCTQ],
+    reservesCTQ: [...initialReservesCTQ],
+    evenementsReserve: [...initialEvenementsReserve],
+    sessionsTechnicien: [...initialSessionsTechnicien],
+    elementsFileSynchronisation: [...initialElementsFileSynchronisation],
+    appareilsTelechargesLocalement: [...initialAppareilsTelechargesLocalement],
+    etatsPTITechnicien: [...initialEtatsPTITechnicien],
+    positionsTechnicien: [...initialPositionsTechnicien],
+    zonesGeographiques: [...initialZonesGeographiques],
+    tourneesDuJour: [...initialTourneesDuJour],
+    tachesAsynchrones: [...initialTachesAsynchrones],
+    notifications: [...initialNotifications],
+    entreesAudit: [...initialEntreesAudit],
+    integrationsExternes: [...initialIntegrationsExternes],
+    journalEchangesIntegration: [...initialJournalEchangesIntegration],
+    indexesConstruits: null,
+    versionIndexes: 0,
+    versionIndexesConstruits: -1,
+    cacheEtapesIntervention: new Map(),
+  };
+}
+
+const globalThisMagasin = globalThis as typeof globalThis & { __magasinManelift?: MagasinDonnees };
+const magasin: MagasinDonnees = globalThisMagasin.__magasinManelift ?? (globalThisMagasin.__magasinManelift = creerMagasinInitial());
+```
+
+Les `const` non déplacés (`historiqueMaintenanceParAscenseur`, `equipementsReferentiel`, etc., voir liste plus haut) restent des déclarations de module inchangées, à leur emplacement actuel.
+
+- [ ] **Step 4 : Migrer chaque référence, guidé par le compilateur**
+
+Après le Step 3, chaque fonction du fichier qui référence un des identifiants de la liste (ex. `techniciens`, `versionIndexes`, `cacheEtapesIntervention`...) sans le préfixe `magasin.` provoque une erreur TypeScript (« Cannot find name »). C'est le filet de sécurité : lancer `npx tsc --noEmit`, corriger chaque erreur en préfixant par `magasin.` (lecture ET écriture), relancer, jusqu'à zéro erreur. Ne corriger que ce que le compilateur signale — ne pas préventivement toucher une ligne qui ne référence aucun des identifiants déplacés.
+
+Exemple complet et représentatif (section « CACHE D'INDEX » juste après le Step 3) :
+
+```ts
+export function getVersionDonnees(): number {
+  return magasin.versionIndexes;
+}
+
+function invaliderIndexes(): void {
+  magasin.versionIndexes++;
+  try {
+    revalidatePath('/', 'layout');
+  } catch {
+    // inchangé
+  }
+}
+
+function obtenirIndexes(): Indexes {
+  if (magasin.indexesConstruits === null || magasin.versionIndexesConstruits !== magasin.versionIndexes) {
+    magasin.indexesConstruits = construireIndexes({
+      secteursGeographiques: magasin.secteursGeographiques,
+      techniciens: magasin.techniciens,
+      tournees: magasin.tournees,
+      clients: magasin.clients,
+      contrats: magasin.contrats,
+      parcs: magasin.parcs,
+      ascenseurs: magasin.ascenseurs,
+      entreesJournalModification: magasin.entreesJournalModification,
+      interventions: magasin.interventions,
+      tickets: magasin.tickets,
+      reaffectations: magasin.reaffectations,
+      rapports: magasin.rapports,
+      photosRapport: magasin.photosRapport,
+      maintenances: magasin.maintenances,
+      typesMaintenanceRef: magasin.typesMaintenanceRef,
+      absencesTechnicien: magasin.absencesTechnicien,
+      bureauxEtudes: magasin.bureauxEtudes,
+      controlesCTQ: magasin.controlesCTQ,
+      reservesCTQ: magasin.reservesCTQ,
+      evenementsReserve: magasin.evenementsReserve,
+      utilisateurs: magasin.utilisateurs,
+      integrationsExternes: magasin.integrationsExternes,
+      journalEchangesIntegration: magasin.journalEchangesIntegration,
+      sessionsTechnicien: magasin.sessionsTechnicien,
+      elementsFileSynchronisation: magasin.elementsFileSynchronisation,
+      appareilsTelechargesLocalement: magasin.appareilsTelechargesLocalement,
+      etatsPTITechnicien: magasin.etatsPTITechnicien,
+      positionsTechnicien: magasin.positionsTechnicien,
+      zonesGeographiques: magasin.zonesGeographiques,
+      tourneesDuJour: magasin.tourneesDuJour,
+      tachesAsynchrones: magasin.tachesAsynchrones,
+      notifications: magasin.notifications,
+      entreesAudit: magasin.entreesAudit,
+    });
+    magasin.versionIndexesConstruits = magasin.versionIndexes;
+  }
+  return magasin.indexesConstruits;
+}
+```
+
+Et pour un mutateur représentatif (`addAscenseur`) :
+
+```ts
+export function addAscenseur(ascenseur: Ascenseur): void {
+  magasin.ascenseurs.push(ascenseur);
+  invaliderIndexes();
+}
+export function updateAscenseur(ascenseur: Ascenseur): void {
+  const index = magasin.ascenseurs.findIndex((a) => a.id === ascenseur.id);
+  if (index !== -1) magasin.ascenseurs[index] = ascenseur;
+  invaliderIndexes();
+}
+```
+
+Appliquer le même remplacement mécanique (préfixer par `magasin.`) à **toutes** les autres fonctions `getAllX`/`getXById`/`addX`/`updateX`/`deleteX` du fichier pour chacun des identifiants de la liste du périmètre — sans exception, jusqu'à ce que `npx tsc --noEmit` ne signale plus aucune erreur dans ce fichier.
+
+Mettre à jour aussi `reinitialiserDonneesDemo()` et `rafraichirFraicheurScenarios()` (Tâche 4) de la même façon, par exemple :
+
+```ts
+export function reinitialiserDonneesDemo(): void {
+  magasin.secteursGeographiques = [...initialSecteursGeographiques];
+  magasin.techniciens = [...initialTechniciens];
+  // … même remplacement mécanique pour chaque ligne existante de cette fonction …
+  magasin.journalEchangesIntegration = [...initialJournalEchangesIntegration];
+
+  rafraichirFraicheurScenarios();
+  magasin.cacheEtapesIntervention.clear();
+  invaliderIndexes();
+}
+```
+
+(`rafraichirFraicheurScenarios()` : remplacer les 3 lectures/écritures de `interventions`, `tickets`, `evenementsReserve` par `magasin.interventions`, `magasin.tickets`, `magasin.evenementsReserve` — la logique interne ne change pas.)
+
+- [ ] **Step 5 : Vérifications**
+
+Run: `npx vitest run data/store.test.ts -t "partage d'état"`
+Expected: PASS — la mutation survit à `vi.resetModules()`.
+
+Run: `npx vitest run` (suite complète)
+Expected: tous les tests passent, y compris ceux de la Tâche 4 (ils lisent/écrivent via les fonctions exportées, dont le comportement observable n'a pas changé).
+
+Run: `npx tsc --noEmit && npm run lint`
+Expected: aucune erreur.
+
+- [ ] **Step 6 : Commit**
+
+```bash
+git add data/store.ts data/store.test.ts
+git commit -m "$(cat <<'EOF'
+Partage l'état du magasin de données via globalThis entre les couches Next.js
+
+Server Components et Server Actions obtiennent chacun leur propre instance
+du module data/store.ts (constaté : une réattribution répond 200 mais
+n'apparaît pas après rechargement). globalThis est le seul objet partagé
+entre toutes les couches d'un même process Node ; l'état mutable y est
+désormais stocké au lieu de liaisons de module. Voir
+https://github.com/vercel/next.js/issues/76025.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
+## Task 6: Test de non-régression — indépendance des dates contractuelles de maintenance
 
 **Dimensionnement recommandé : Sonnet 5** (test isolé sur des fonctions pures déjà écrites, aucune nouvelle logique).
 
@@ -850,7 +1160,7 @@ EOF
 
 ---
 
-## Task 6: Bascule Web ⇄ Android dans la navigation
+## Task 7: Bascule Web ⇄ Android dans la navigation
 
 **Dimensionnement recommandé : Sonnet 5** (composant présentatif, deux fichiers).
 
@@ -929,7 +1239,7 @@ EOF
 
 ---
 
-## Task 7: Vérification globale et mise à jour du README
+## Task 8: Vérification globale et mise à jour du README
 
 **Dimensionnement recommandé : Sonnet 5.**
 
