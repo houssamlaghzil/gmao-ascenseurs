@@ -74,6 +74,7 @@ import {
   TypeEtapeIntervention,
   OrigineAction,
   StatutIntervention,
+  MotifIntervention,
   StatutValidationRapport,
   StatutAppareil,
 } from '@/domain/types';
@@ -1079,4 +1080,125 @@ export function getStatistiquesParc(parcId: string): StatistiquesParc {
 /** Statistiques de tous les parcs. */
 export function getAllStatistiquesParc(): StatistiquesParc[] {
   return parcs.map((parc) => getStatistiquesParc(parc.id));
+}
+
+// ============================================================================
+// 11. DÉMONSTRATION — RÉINITIALISATION
+// ============================================================================
+//
+// Le magasin est global au process (pas de session par visiteur) : cette
+// fonction remet TOUT le monde à zéro simultanément. Prévue pour un usage
+// volontaire et rare (entre deux ateliers), jamais appelée automatiquement.
+
+export function reinitialiserDonneesDemo(): void {
+  secteursGeographiques = [...initialSecteursGeographiques];
+  techniciens = [...initialTechniciens];
+  tournees = [...initialTournees];
+  definitionsSLA = [...initialDefinitionsSLA];
+  clients = [...initialClients];
+  contrats = [...initialContrats];
+  parcs = [...initialParcs];
+  ascenseurs = [...initialAscenseurs];
+  entreesJournalModification = [...initialEntreesJournalModification];
+  utilisateurs = [...initialUtilisateurs];
+  typesMaintenanceRef = [...initialTypesMaintenanceRef];
+  causesPanneRef = [...initialCausesPanneRef];
+  maintenances = [...initialMaintenances];
+  interventions = [...initialInterventions];
+  tickets = [...initialTickets];
+  reaffectations = [...initialReaffectations];
+  absencesTechnicien = [...initialAbsencesTechnicien];
+  photosRapport = [...initialPhotosRapport];
+  rapports = [...initialRapports];
+  bureauxEtudes = [...initialBureauxEtudes];
+  controlesCTQ = [...initialControlesCTQ];
+  reservesCTQ = [...initialReservesCTQ];
+  evenementsReserve = [...initialEvenementsReserve];
+  sessionsTechnicien = [...initialSessionsTechnicien];
+  elementsFileSynchronisation = [...initialElementsFileSynchronisation];
+  appareilsTelechargesLocalement = [...initialAppareilsTelechargesLocalement];
+  etatsPTITechnicien = [...initialEtatsPTITechnicien];
+  positionsTechnicien = [...initialPositionsTechnicien];
+  zonesGeographiques = [...initialZonesGeographiques];
+  tourneesDuJour = [...initialTourneesDuJour];
+  tachesAsynchrones = [...initialTachesAsynchrones];
+  notifications = [...initialNotifications];
+  entreesAudit = [...initialEntreesAudit];
+  integrationsExternes = [...initialIntegrationsExternes];
+  journalEchangesIntegration = [...initialJournalEchangesIntegration];
+
+  rafraichirFraicheurScenarios();
+  cacheEtapesIntervention.clear();
+  invaliderIndexes();
+}
+
+/** Vrai si l'intervention n'a franchi aucune étape après sa création (ni affectation, ni prise en charge, ni arrivée, ni fin, ni validation, ni clôture). */
+function aucunJalonApresCreation(intervention: Intervention): boolean {
+  return (
+    !intervention.dateAffectation &&
+    !intervention.datePriseEnCharge &&
+    !intervention.dateArriveeSite &&
+    !intervention.dateTerminee &&
+    !intervention.dateValidation &&
+    !intervention.dateCloture
+  );
+}
+
+function decalerDateISO(dateISO: string, decalageMs: number): string {
+  return new Date(new Date(dateISO).getTime() + decalageMs).toISOString();
+}
+
+/**
+ * Recale dans le temps les données sensibles à la fraîcheur (cahier des
+ * charges maquette, section 4.3) : sans ce recalage, un process resté
+ * plusieurs jours en vie affiche des urgences "personne bloquée" vieilles de
+ * plusieurs semaines, ou des événements de réserve datés dans le futur.
+ * Exportée pour être testée isolément (voir data/store.test.ts).
+ *
+ * Seules les urgences "personne bloquée" encore intactes (aucun jalon après
+ * la création, soit les interventions NOUVEAU du jeu de données) sont
+ * rajeunies : déplacer la création d'une intervention déjà affectée, prise
+ * en charge ou terminée la placerait après ses propres étapes suivantes.
+ * Chaque intervention rajeunie est décalée d'un seul bloc — création,
+ * fenêtre SLA et tickets rattachés — pour que l'échéance SLA reste après la
+ * création et que le 1er ticket reste le point de départ du décompte.
+ */
+export function rafraichirFraicheurScenarios(): void {
+  const maintenant = getDateDemo();
+  const maintenantMs = maintenant.getTime();
+  const decalageParIntervention = new Map<string, number>();
+  let rang = 0;
+
+  interventions = interventions.map((intervention) => {
+    if (intervention.motif !== MotifIntervention.PERSONNE_BLOQUEE) return intervention;
+    if (!aucunJalonApresCreation(intervention)) return intervention;
+    const ancienneteMinutes = 5 + ((rang++ * 7) % 40); // étalées entre 5 et 44 minutes, de façon déterministe
+    const decalageMs = maintenantMs - ancienneteMinutes * 60_000 - new Date(intervention.dateCreation).getTime();
+    decalageParIntervention.set(intervention.id, decalageMs);
+    return {
+      ...intervention,
+      dateCreation: decalerDateISO(intervention.dateCreation, decalageMs),
+      dateDebutDecompteSLA: decalerDateISO(intervention.dateDebutDecompteSLA, decalageMs),
+      dateLimiteSLA: decalerDateISO(intervention.dateLimiteSLA, decalageMs),
+    };
+  });
+
+  // Un ticket rattaché plus tard (2e signalement) ne doit pas se retrouver dans le futur après décalage.
+  const decalerSansDepasserMaintenant = (dateISO: string, decalageMs: number): string =>
+    new Date(Math.min(new Date(dateISO).getTime() + decalageMs, maintenantMs)).toISOString();
+  tickets = tickets.map((ticket) => {
+    const decalageMs = ticket.interventionId ? decalageParIntervention.get(ticket.interventionId) : undefined;
+    if (decalageMs === undefined) return ticket;
+    return {
+      ...ticket,
+      dateReception: decalerSansDepasserMaintenant(ticket.dateReception, decalageMs),
+      ...(ticket.dateRapprochement ? { dateRapprochement: decalerSansDepasserMaintenant(ticket.dateRapprochement, decalageMs) } : {}),
+    };
+  });
+
+  evenementsReserve = evenementsReserve.map((evenement) =>
+    new Date(evenement.dateHeure).getTime() > maintenant.getTime()
+      ? { ...evenement, dateHeure: maintenant.toISOString() }
+      : evenement
+  );
 }
