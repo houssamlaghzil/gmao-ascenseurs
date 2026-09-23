@@ -1059,7 +1059,7 @@ export function getRiskScoreForAscenseur(ascenseurId: string): RiskScore | null 
   if (!ascenseur) return null;
   const parc = getParcById(ascenseur.parcId);
   if (!parc) return null;
-  return computeFullRiskScore(ascenseur, getInterventionsByAscenseurId(ascenseurId), parc);
+  return computeFullRiskScore(ascenseur, getInterventionsByAscenseurId(ascenseurId), parc, getDateDemo());
 }
 
 /** Statistiques d'un parc, ventilées par StatutAppareil. */

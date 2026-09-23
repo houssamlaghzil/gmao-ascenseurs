@@ -13,7 +13,7 @@
 
 import { cache } from 'react';
 import { CategorieMaintenance, Maintenance, MaintenanceAvecUrgence, PrioriteAffichageMaintenance } from '@/domain/types';
-import { getAllContrats, getAllTechniciens, getAllTournees } from '@/data/store';
+import { getAllContrats, getAllTechniciens, getAllTournees, getDateDemo } from '@/data/store';
 import { enrichirMaintenance } from '@/lib/derived/maintenances-appareil';
 
 /** Filtres de l'écran Maintenances — un choix par filtre (UI volontairement simple). */
@@ -51,7 +51,7 @@ function parDatePrevueAsc(a: Maintenance, b: Maintenance): number {
  * cf. MaintenanceAvecUrgence) : la vue prioritaire ne concerne que les
  * passages encore ouverts.
  */
-export function construireGroupesPriorite(maintenances: Maintenance[], maintenant: Date = new Date()): GroupesPrioriteMaintenance {
+export function construireGroupesPriorite(maintenances: Maintenance[], maintenant: Date = getDateDemo()): GroupesPrioriteMaintenance {
   const enrichies = maintenances.map((m) => enrichirMaintenance(m, maintenant));
   const enRetard = enrichies.filter((m) => m.prioriteAffichage === PrioriteAffichageMaintenance.EN_RETARD).sort(parDatePrevueAsc);
   const cetteSemaine = enrichies.filter((m) => m.prioriteAffichage === PrioriteAffichageMaintenance.CETTE_SEMAINE).sort(parDatePrevueAsc);

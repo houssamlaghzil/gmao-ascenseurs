@@ -33,6 +33,7 @@ import {
   getAllTechniciens,
   getAllTournees,
   getAscenseurById,
+  getDateDemo,
   getInterventionsByTechnicienId,
   getMaintenancesByTechnicienId,
   getReaffectationsByCible,
@@ -136,7 +137,7 @@ export function getTachesPlanningTechnicien(
   technicienId: string,
   debut: Date,
   fin: Date,
-  maintenant: Date = new Date()
+  maintenant: Date = getDateDemo()
 ): TachePlanning[] {
   const debutMs = debut.getTime();
   const finMs = fin.getTime();
@@ -172,7 +173,7 @@ export function construireLignesPlanning(
   techniciens: Technicien[],
   debut: Date,
   fin: Date,
-  maintenant: Date = new Date()
+  maintenant: Date = getDateDemo()
 ): LignePlanningTechnicien[] {
   return techniciens.map((technicien) => {
     const tournee = getTourneesByTechnicienId(technicien.id)[0];
@@ -281,7 +282,7 @@ export interface LigneAbsencePlanning {
   tachesConcernees: TachePlanning[];
 }
 
-export function construireLignesAbsences(maintenant: Date = new Date()): LigneAbsencePlanning[] {
+export function construireLignesAbsences(maintenant: Date = getDateDemo()): LigneAbsencePlanning[] {
   return getAllAbsencesTechnicien()
     .map((absence): LigneAbsencePlanning => {
       const technicien = getTechnicienById(absence.technicienId);

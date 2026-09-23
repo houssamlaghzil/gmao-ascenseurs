@@ -14,7 +14,7 @@
 import Link from 'next/link';
 import { AlertTriangle, CalendarClock, CalendarDays, ChevronRight, Wrench } from 'lucide-react';
 import { EtatConnexionMobile, MaintenanceAvecUrgence, PrioriteAffichageMaintenance } from '@/domain/types';
-import { getAscenseurById, getMaintenancesByTechnicienId, getSessionActiveDuTechnicien } from '@/data/store';
+import { getAscenseurById, getDateDemo, getMaintenancesByTechnicienId, getSessionActiveDuTechnicien } from '@/data/store';
 import { getTechnicienConnecteId } from '@/lib/mobile-session';
 import { enrichirMaintenance } from '@/lib/derived/maintenances-appareil';
 import { LIBELLE_CATEGORIE_MAINTENANCE } from '@/lib/derived/libelles-parc';
@@ -103,7 +103,7 @@ export default function MaintenancesMobilePage({ searchParams }: MaintenancesMob
   const etatConnexion = getSessionActiveDuTechnicien(technicienId)?.etatConnexion ?? EtatConnexionMobile.EN_LIGNE;
   const appareilId = searchParams.appareilId;
 
-  const maintenant = new Date();
+  const maintenant = getDateDemo();
   let maintenances = getMaintenancesByTechnicienId(technicienId).map((m) => enrichirMaintenance(m, maintenant));
   if (appareilId) maintenances = maintenances.filter((m) => m.ascenseurId === appareilId);
 

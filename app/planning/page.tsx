@@ -29,7 +29,7 @@ import {
   plageSemaine,
   type FiltresPlanningUI,
 } from '@/lib/derived/planning';
-import { getAllTechniciens } from '@/data/store';
+import { getAllTechniciens, getDateDemo } from '@/data/store';
 import FiltresPlanningForm from './components/FiltresPlanningForm';
 import PlanningTabs from './components/PlanningTabs';
 import PlanningVueSwitch from './components/PlanningVueSwitch';
@@ -90,7 +90,7 @@ export default function PlanningPage({ searchParams }: PlanningPageProps) {
   const vueParam = param(searchParams, 'vue');
   const vue: Vue = vueParam === 'semaine' || vueParam === 'mois' ? vueParam : 'jour';
 
-  const maintenant = new Date();
+  const maintenant = getDateDemo();
   const dateKey = param(searchParams, 'date') ?? formatDateKey(maintenant);
 
   const { debut, fin } = vue === 'jour' ? plageJour(dateKey) : vue === 'semaine' ? plageSemaine(dateKey) : plageMois(formatMoisKey(new Date(`${dateKey}T00:00:00.000Z`)));

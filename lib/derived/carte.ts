@@ -42,6 +42,7 @@ import {
   getAllZonesGeographiques,
   getAllTourneesDuJour,
   getTourneeById,
+  getDateDemo,
 } from '@/data/store';
 import { estMaintenanceEnRetard } from '@/lib/derived/maintenances-appareil';
 import type { OptionFiltre } from '@/lib/derived/parc-liste';
@@ -206,7 +207,7 @@ const construireIndexInterventionsUrgentes = cache((): Map<string, UrgenceParApp
 
 const construireIndexMaintenancesEnRetard = cache((): Set<string> => {
   const set = new Set<string>();
-  const maintenant = new Date();
+  const maintenant = getDateDemo();
   for (const maintenance of getAllMaintenances()) {
     if (estMaintenanceEnRetard(maintenance, maintenant)) set.add(maintenance.ascenseurId);
   }

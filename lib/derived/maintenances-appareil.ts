@@ -9,13 +9,14 @@
  */
 
 import { Maintenance, StatutMaintenance, PrioriteAffichageMaintenance, MaintenanceAvecUrgence } from '@/domain/types';
+import { getDateDemo } from '@/data/store';
 
 const JOUR_MS = 24 * 60 * 60 * 1000;
 const FENETRE_CETTE_SEMAINE_MS = 7 * JOUR_MS;
 
 const STATUTS_OUVERTS: StatutMaintenance[] = [StatutMaintenance.PLANIFIEE, StatutMaintenance.EN_COURS_DE_REALISATION];
 
-export function enrichirMaintenance(maintenance: Maintenance, maintenant: Date = new Date()): MaintenanceAvecUrgence {
+export function enrichirMaintenance(maintenance: Maintenance, maintenant: Date = getDateDemo()): MaintenanceAvecUrgence {
   const datePrevueMs = new Date(maintenance.datePrevue).getTime();
   const estOuverte = STATUTS_OUVERTS.includes(maintenance.statut);
   const retardJours = estOuverte && datePrevueMs < maintenant.getTime()
@@ -37,7 +38,7 @@ export function enrichirMaintenance(maintenance: Maintenance, maintenant: Date =
   return { ...maintenance, retardJours, prioriteAffichage, dureeEnCoursMinutes };
 }
 
-export function estMaintenanceEnRetard(maintenance: Maintenance, maintenant: Date = new Date()): boolean {
+export function estMaintenanceEnRetard(maintenance: Maintenance, maintenant: Date = getDateDemo()): boolean {
   return enrichirMaintenance(maintenance, maintenant).retardJours > 0;
 }
 
@@ -49,7 +50,7 @@ export function trouverDerniereMaintenanceRealisee(maintenances: Maintenance[]):
 }
 
 /** Prochaine maintenance planifiée ou en cours, triée par date prévue. */
-export function trouverProchaineMaintenancePlanifiee(maintenances: Maintenance[], maintenant: Date = new Date()): Maintenance | undefined {
+export function trouverProchaineMaintenancePlanifiee(maintenances: Maintenance[], maintenant: Date = getDateDemo()): Maintenance | undefined {
   return [...maintenances]
     .filter((m) => STATUTS_OUVERTS.includes(m.statut))
     .sort((a, b) => new Date(a.datePrevue).getTime() - new Date(b.datePrevue).getTime())[0];

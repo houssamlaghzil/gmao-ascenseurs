@@ -15,6 +15,7 @@
  */
 
 import { EtatSLA, EtatSLACalcule, Intervention } from '@/domain/types';
+import { getDateDemo } from '@/data/store';
 
 /** Seuil d'alerte "bientôt dépassé" : 15 minutes ou 15 % du délai contractuel, le plus grand des deux. */
 function seuilAlerteMinutes(intervention: Intervention): number {
@@ -26,7 +27,7 @@ function seuilAlerteMinutes(intervention: Intervention): number {
  * l'heure courante). Ne modifie jamais l'intervention — calcul de lecture,
  * jamais stocké (voir EtatSLACalcule).
  */
-export function calculerEtatSLA(intervention: Intervention, maintenant: Date = new Date()): EtatSLACalcule {
+export function calculerEtatSLA(intervention: Intervention, maintenant: Date = getDateDemo()): EtatSLACalcule {
   const base = {
     interventionId: intervention.id,
     delaiContractuelMinutes: intervention.delaiContractuelMinutes,
@@ -72,12 +73,12 @@ export function calculerEtatSLA(intervention: Intervention, maintenant: Date = n
  * état DEPASSE au sens de `calculerEtatSLA` (donc jamais vrai pour un accès
  * refusé ou une intervention sans délai, NON_APPLICABLE par définition).
  */
-export function estInterventionHorsSLA(intervention: Intervention, maintenant: Date = new Date()): boolean {
+export function estInterventionHorsSLA(intervention: Intervention, maintenant: Date = getDateDemo()): boolean {
   return calculerEtatSLA(intervention, maintenant).etat === EtatSLA.DEPASSE;
 }
 
 /** Taux de respect du SLA (0-100) sur un ensemble d'interventions donné. */
-export function calculerTauxRespectSLA(interventions: Intervention[], maintenant: Date = new Date()): number {
+export function calculerTauxRespectSLA(interventions: Intervention[], maintenant: Date = getDateDemo()): number {
   if (interventions.length === 0) return 100;
   const respectees = interventions.filter((i) => calculerEtatSLA(i, maintenant).etat !== EtatSLA.DEPASSE).length;
   return Math.round((respectees / interventions.length) * 100);

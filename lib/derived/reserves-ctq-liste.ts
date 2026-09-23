@@ -8,7 +8,7 @@
 import { cache } from 'react';
 import { GraviteReserve, ReserveCTQ, StatutReserve } from '@/domain/types';
 import { estReserveEnRetard } from '@/domain/business-logic';
-import { getAllReservesCTQ, getAscenseurById, getClientById, getControleCTQById, getTechnicienById } from '@/data/store';
+import { getAllReservesCTQ, getAscenseurById, getClientById, getControleCTQById, getDateDemo, getTechnicienById } from '@/data/store';
 import { libelleBlocReserve } from './libelles-ctq';
 
 /** Ligne enrichie de la liste des réserves CTQ — vue de lecture, jamais stockée. */
@@ -72,7 +72,7 @@ function construireLigne(reserve: ReserveCTQ, maintenant: Date): LigneReserveCTQ
 
 /** Toutes les lignes de la liste des réserves CTQ, plus récentes en premier. Mis en cache pour la durée de la requête. */
 export const getLignesReservesCTQ = cache((): LigneReserveCTQListe[] => {
-  const maintenant = new Date();
+  const maintenant = getDateDemo();
   return getAllReservesCTQ()
     .map((reserve) => construireLigne(reserve, maintenant))
     .sort((a, b) => new Date(b.dateConstat).getTime() - new Date(a.dateConstat).getTime());

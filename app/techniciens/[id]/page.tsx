@@ -13,6 +13,7 @@ import { LienTechnicien } from '@/components/Liens';
 import {
   getAllAbsencesTechnicien,
   getAscenseursByTourneeId,
+  getDateDemo,
   getElementsFileSynchronisationByTechnicienId,
   getInterventionsByTechnicienId,
   getMaintenancesByTechnicienId,
@@ -59,7 +60,7 @@ export default function FicheTechnicienPage({ params, searchParams }: FicheTechn
   const tournees = getTourneesByTechnicienId(technicien.id);
   const nombreAppareilsCouverts = tournees.reduce((total, t) => total + getAscenseursByTourneeId(t.id).length, 0);
 
-  const maintenant = new Date();
+  const maintenant = getDateDemo();
   const dansSeptJours = new Date(maintenant.getTime() + FENETRE_PLANNING_JOURS * 24 * 60 * 60 * 1000);
   const tachesAVenir = getTachesPlanningTechnicien(technicien.id, maintenant, dansSeptJours, maintenant);
 

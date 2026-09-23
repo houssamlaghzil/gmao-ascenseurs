@@ -34,6 +34,7 @@ import {
   getAllSecteursGeographiques,
   getAllMaintenances,
   getAllInterventions,
+  getDateDemo,
 } from '@/data/store';
 import { calculerDisponibilitePourcent } from '@/lib/derived/disponibilite';
 import { estMaintenanceEnRetard, trouverDerniereMaintenanceRealisee, trouverProchaineMaintenancePlanifiee } from '@/lib/derived/maintenances-appareil';
@@ -160,7 +161,7 @@ function construireLigne(ascenseur: Ascenseur, refs: IndexReferentiels, jointure
 export const getLignesAppareils = cache((): LigneAppareilListe[] => {
   const refs = construireIndexReferentiels();
   const jointures = construireIndexJointures();
-  const maintenant = new Date();
+  const maintenant = getDateDemo();
   return getAllAscenseurs()
     .map((ascenseur) => construireLigne(ascenseur, refs, jointures, maintenant))
     .sort((a, b) => a.code.localeCompare(b.code));

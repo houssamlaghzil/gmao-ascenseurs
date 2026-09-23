@@ -35,6 +35,7 @@ import {
 } from '@/domain/types';
 import {
   getAscenseurById,
+  getDateDemo,
   getElementsFileSynchronisationByTechnicienId,
   getInterventionsByTechnicienId,
   getMaintenancesByTechnicienId,
@@ -75,7 +76,7 @@ function estInterventionUrgente(i: Intervention): boolean {
 }
 
 /** Construit les 4 blocs de l'écran d'accueil pour un technicien donné. */
-export function construireBlocsAccueilTechnicien(technicienId: string, maintenant: Date = new Date()): BlocsAccueilTechnicien {
+export function construireBlocsAccueilTechnicien(technicienId: string, maintenant: Date = getDateDemo()): BlocsAccueilTechnicien {
   const todayKey = formatDateKey(maintenant);
 
   const interventionsOuvertes = getInterventionsByTechnicienId(technicienId).filter((i) => i.statut !== StatutIntervention.CLOTURE);

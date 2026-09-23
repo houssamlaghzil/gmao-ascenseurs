@@ -28,9 +28,10 @@ import {
 function countInterventionsRecentes(
   interventions: Intervention[],
   ascenseurId: string,
-  nbJours: number
+  nbJours: number,
+  maintenant: Date = new Date()
 ): number {
-  const seuil = new Date();
+  const seuil = new Date(maintenant);
   seuil.setDate(seuil.getDate() - nbJours);
 
   return interventions.filter(
@@ -58,12 +59,12 @@ function getDerniereInterventionCloturee(
  */
 function joursDepuisDerniereIntervention(
   interventions: Intervention[],
-  ascenseurId: string
+  ascenseurId: string,
+  maintenant: Date = new Date()
 ): number {
   const derniere = getDerniereInterventionCloturee(interventions, ascenseurId);
   if (!derniere) return 365; // Aucune intervention clôturée = considéré comme ancien
 
-  const maintenant = new Date();
   const diff = maintenant.getTime() - derniere.getTime();
   return Math.floor(diff / (1000 * 60 * 60 * 24));
 }
@@ -124,12 +125,13 @@ function bonusStatutActuel(statut: StatutAppareil): number {
 export function computeRiskScore(
   ascenseur: Ascenseur,
   interventions: Intervention[],
-  parc: ParcAscenseurs
+  parc: ParcAscenseurs,
+  maintenant: Date = new Date()
 ): number {
-  const interventionsRecentes = countInterventionsRecentes(interventions, ascenseur.id, 30);
+  const interventionsRecentes = countInterventionsRecentes(interventions, ascenseur.id, 30, maintenant);
   const scoreInterventions = interventionsRecentes * 15;
 
-  const joursDepuis = joursDepuisDerniereIntervention(interventions, ascenseur.id);
+  const joursDepuis = joursDepuisDerniereIntervention(interventions, ascenseur.id, maintenant);
   const scoreTemps = joursDepuis / 10;
 
   let scoreBase = scoreInterventions + scoreTemps;
@@ -162,10 +164,11 @@ export function generateRiskExplanation(
   ascenseur: Ascenseur,
   interventions: Intervention[],
   parc: ParcAscenseurs,
-  score: number
+  score: number,
+  maintenant: Date = new Date()
 ): string {
-  const interventionsRecentes = countInterventionsRecentes(interventions, ascenseur.id, 30);
-  const joursDepuis = joursDepuisDerniereIntervention(interventions, ascenseur.id);
+  const interventionsRecentes = countInterventionsRecentes(interventions, ascenseur.id, 30, maintenant);
+  const joursDepuis = joursDepuisDerniereIntervention(interventions, ascenseur.id, maintenant);
   const level = getRiskLevel(score);
 
   let explication = '';
@@ -217,11 +220,12 @@ export function generateRiskExplanation(
 export function computeFullRiskScore(
   ascenseur: Ascenseur,
   interventions: Intervention[],
-  parc: ParcAscenseurs
+  parc: ParcAscenseurs,
+  maintenant: Date = new Date()
 ): RiskScore {
-  const score = computeRiskScore(ascenseur, interventions, parc);
+  const score = computeRiskScore(ascenseur, interventions, parc, maintenant);
   const level = getRiskLevel(score);
-  const explication = generateRiskExplanation(ascenseur, interventions, parc, score);
+  const explication = generateRiskExplanation(ascenseur, interventions, parc, score, maintenant);
 
   return { score, level, explication };
 }

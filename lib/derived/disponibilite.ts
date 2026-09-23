@@ -8,6 +8,7 @@
  */
 
 import { Ascenseur, Intervention, StatutAppareil } from '@/domain/types';
+import { getDateDemo } from '@/data/store';
 
 const JOUR_MS = 24 * 60 * 60 * 1000;
 
@@ -29,7 +30,7 @@ const PLANCHER_AFFICHAGE = 60;
 export function calculerDisponibilitePourcent(
   ascenseur: Ascenseur,
   interventionsAppareil: Intervention[],
-  maintenant: Date = new Date()
+  maintenant: Date = getDateDemo()
 ): number {
   const seuilRecence = new Date(maintenant.getTime() - 30 * JOUR_MS);
   const nombreInterventionsRecentes = interventionsAppareil.filter(

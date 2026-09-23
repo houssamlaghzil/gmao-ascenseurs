@@ -49,6 +49,7 @@ import {
   getAllEvenementsReserve,
   getAllTechniciens,
   getAscenseurById,
+  getDateDemo,
   getEntreesJournalModificationByAscenseurId,
   getInterventionsByAscenseurId,
   getInterventionsByTechnicienId,
@@ -245,7 +246,7 @@ export interface KpisTableauDeBord {
  */
 export function getPrioriteAffichageMaintenance(
   maintenance: Maintenance,
-  maintenant: Date = new Date()
+  maintenant: Date = getDateDemo()
 ): PrioriteAffichageMaintenance | null {
   if (maintenance.statut === StatutMaintenance.REALISEE || maintenance.statut === StatutMaintenance.ANNULEE) {
     return null;
@@ -258,7 +259,7 @@ export function getPrioriteAffichageMaintenance(
   return PrioriteAffichageMaintenance.A_VENIR;
 }
 
-function getKpisTableauDeBordImpl(maintenant: Date = new Date()): KpisTableauDeBord {
+function getKpisTableauDeBordImpl(maintenant: Date = getDateDemo()): KpisTableauDeBord {
   const parc = agregatsParc();
   const interventions = agregatsInterventions();
 
@@ -355,7 +356,7 @@ const MOIS_AFFICHES = 3;
  * prévoit pas.
  */
 function getActiviteParJourImpl(_nbJoursIgnore?: number): JourActivite[] {
-  const aujourdhui = new Date();
+  const aujourdhui = getDateDemo();
   aujourdhui.setHours(0, 0, 0, 0);
   const cleAujourdhui = cleJourLocale(aujourdhui);
 
@@ -516,7 +517,7 @@ export const getRepartitionCausesPanne = memoiserSurVersion(getVersionDonnees, g
 function getTauxRespectSLAGlobalImpl(): number {
   const { total } = agregatsInterventions();
   if (total === 0) return 100;
-  const horsSLA = compteurInterventionsHorsSLA(Date.now());
+  const horsSLA = compteurInterventionsHorsSLA(getDateDemo().getTime());
   return Math.round(((total - horsSLA) / total) * 100);
 }
 
@@ -614,7 +615,7 @@ function tendance7jPourAscenseur(ascenseurId: string): number[] {
     const key = cleJourLocale(new Date(i.dateCreation));
     parJour.set(key, (parJour.get(key) ?? 0) + 1);
   }
-  const aujourdhui = new Date();
+  const aujourdhui = getDateDemo();
   aujourdhui.setHours(0, 0, 0, 0);
   const jours: number[] = [];
   for (let n = 6; n >= 0; n--) {
@@ -665,7 +666,7 @@ const LIMITE_ITEMS_PAR_GROUPE = 4;
 const SEUIL_NON_PRIS_EN_CHARGE_MINUTES = 120;
 
 /** Bloc "Urgences" (section 3.3) — court et priorisé, groupé par nature d'urgence. */
-export function getUrgences(ascenseursAvecRisque: AscenseurAvecRisque[], maintenant: Date = new Date()): GroupeUrgence[] {
+export function getUrgences(ascenseursAvecRisque: AscenseurAvecRisque[], maintenant: Date = getDateDemo()): GroupeUrgence[] {
   const maintenantMs = maintenant.getTime();
 
   // Les statuts TERMINE/A_VALIDER signifient que le technicien a déjà réglé la situation sur

@@ -67,6 +67,8 @@ vi.mock('@/data/store', () => {
     getMaintenancesByTechnicienId: (technicienId: string) =>
       magasin.maintenances.filter((m) => m.technicienId === technicienId),
     getTicketsNonRapproches: () => [],
+    // getDateDemo : horloge de démonstration (Tâche 3) — même heure que le système, fausse horloge comprise.
+    getDateDemo: () => new Date(),
   };
 });
 

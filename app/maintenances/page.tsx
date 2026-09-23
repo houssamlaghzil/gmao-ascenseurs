@@ -10,7 +10,7 @@
 
 import { ClipboardList } from 'lucide-react';
 import { CategorieMaintenance } from '@/domain/types';
-import { getAllMaintenances, getAllTypesMaintenanceRef } from '@/data/store';
+import { getAllMaintenances, getAllTypesMaintenanceRef, getDateDemo } from '@/data/store';
 import {
   construireGroupesPriorite,
   filtrerMaintenances,
@@ -73,7 +73,7 @@ export default function MaintenancesPage({ searchParams }: MaintenancesPageProps
     categorie: param(searchParams, 'categorie') as CategorieMaintenance | undefined,
   };
 
-  const maintenant = new Date();
+  const maintenant = getDateDemo();
   const toutesLesMaintenances = getAllMaintenances();
   const maintenancesFiltrees = filtrerMaintenances(toutesLesMaintenances, filtres);
 

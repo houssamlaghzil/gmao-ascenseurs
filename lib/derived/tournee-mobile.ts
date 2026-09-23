@@ -29,6 +29,7 @@ import {
   getAscenseurById,
   getAscenseursByTechnicienId,
   getAscenseursByTourneeId,
+  getDateDemo,
   getInterventionsByTechnicienId,
   getMaintenancesByTechnicienId,
   getTourneesByTechnicienId,
@@ -82,7 +83,7 @@ export function getAscenseursTourneeHabituelle(technicienId: string): Map<string
  * Tous les arrêts concernant un technicien, triés par urgence décroissante
  * puis par code appareil. `maintenant` est injectable pour les tests.
  */
-export function getArretsTourneeTechnicien(technicienId: string, maintenant: Date = new Date()): ArretTourneeMobile[] {
+export function getArretsTourneeTechnicien(technicienId: string, maintenant: Date = getDateDemo()): ArretTourneeMobile[] {
   const ascenseursHabituels = getAscenseursTourneeHabituelle(technicienId);
 
   const interventionsOuvertes = getInterventionsByTechnicienId(technicienId).filter((i) => i.statut !== StatutIntervention.CLOTURE);

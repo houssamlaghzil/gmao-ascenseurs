@@ -101,7 +101,7 @@ import {
   StatutContrat,
   StatutMaintenance,
 } from '@/domain/types';
-import { getAllAscenseurs, getAllClients, getAllContrats, getAllMaintenances } from '@/data/store';
+import { getAllAscenseurs, getAllClients, getAllContrats, getAllMaintenances, getDateDemo } from '@/data/store';
 
 // ============================================================================
 // Quotas contractuels
@@ -351,7 +351,7 @@ export function calculerConformiteAppareil(
   contrat: Contrat | undefined,
   maintenances: Maintenance[],
   annee: number,
-  maintenant: Date = new Date(),
+  maintenant: Date = getDateDemo(),
 ): ConformiteAppareil {
   const occurrences = occurrencesParCategorieVides();
   const maintenantMs = maintenant.getTime();
@@ -373,7 +373,7 @@ export function anneeConformiteCourante(): number {
  */
 export const getConformiteAppareils = cache((annee: number): ConformiteAppareil[] => {
   const contratsParId = new Map(getAllContrats().map((c) => [c.id, c]));
-  const maintenantMs = Date.now();
+  const maintenantMs = getDateDemo().getTime();
 
   // Passe unique sur les ~31 700 maintenances.
   const occurrencesParAppareil = new Map<string, OccurrencesParCategorie>();
